@@ -32,6 +32,31 @@ private const val YELLOW = "93"
 private val HIGHLIGHTED = Regex("`([^`]+)`")
 
 /**
+ * The game's colours, by the code after a `§` that picks each, as Bedrock
+ * draws them: Java's sixteen, then Bedrock's own for its materials, where
+ * `§m` and `§n` are colours too, not strikethrough and underline.
+ */
+private val GAME_COLOURS = mapOf(
+    '0' to 0x000000, '1' to 0x0000AA, '2' to 0x00AA00, '3' to 0x00AAAA, '4' to 0xAA0000, '5' to 0xAA00AA, '6' to 0xFFAA00, '7' to 0xAAAAAA,
+    '8' to 0x555555, '9' to 0x5555FF, 'a' to 0x55FF55, 'b' to 0x55FFFF, 'c' to 0xFF5555, 'd' to 0xFF55FF, 'e' to 0xFFFF55, 'f' to 0xFFFFFF,
+    'g' to 0xDDD605, 'h' to 0xE3D4D1, 'i' to 0xCECACA, 'j' to 0x443A3B, 'm' to 0x971607, 'n' to 0xB4684D, 'p' to 0xDEB12D,
+    'q' to 0x47A036, 's' to 0x2CBAA8, 't' to 0x21497B, 'u' to 0x9A5CC6, 'v' to 0xEB7114,
+)
+
+// The game's codes for bold and italic text, and for going back to plain.
+private const val GAME_BOLD = 'l'
+private const val GAME_ITALIC = 'o'
+private const val GAME_RESET = 'r'
+
+/** A `§` and the code after it, which picks a colour or a style, like `§d` or `§l`. */
+private val GAME_CODE = Regex("§(.?)")
+
+/** The terminal's codes for bold and italic, and for going back to its own colours and style. */
+private const val BOLD = "1"
+private const val ITALIC = "3"
+private const val RESET = "0"
+
+/**
  * What a line of the log is, in three letters: an error, a warning, what a
  * player said, a command they ran, how they died, anything else that
  * happened, or detail for finding out what went wrong.
@@ -48,6 +73,36 @@ fun tagOf(event: ILoggingEvent): String = when {
 
 /** [text] in the terminal's colour [code], and back to its own after. */
 private fun coloured(code: String, text: String) = "\u001B[${code}m$text\u001B[0m"
+
+/** The terminal's code for [style], like [BOLD], or a colour as 24-bit RGB. */
+private fun ansi(style: String) = "\u001B[${style}m"
+
+/**
+ * [text] with the game's codes, like an item's name in `§d`, drawn in the
+ * terminal's: each colour as the game has it, bold and italic as they are,
+ * and `§r` back to plain. Codes a terminal has nothing for, like `§k` for
+ * scrambled text, are left out. Anything coloured goes back to plain at
+ * the end, so it doesn't run into the next line.
+ */
+fun gameColoured(text: String): String {
+    if ('§' !in text) return text
+    var styled = false
+    val drawn = GAME_CODE.replace(text) { match ->
+        val code = match.groupValues[1].lowercase().firstOrNull()
+        val colour = GAME_COLOURS[code]
+        when {
+            colour != null -> ansi("38;2;${colour shr 16 and 0xFF};${colour shr 8 and 0xFF};${colour and 0xFF}")
+            code == GAME_BOLD -> ansi(BOLD)
+            code == GAME_ITALIC -> ansi(ITALIC)
+            code == GAME_RESET -> ansi(RESET)
+            else -> ""
+        }.also { if (it.isNotEmpty() && code != GAME_RESET) styled = true }
+    }
+    return if (styled) drawn + ansi(RESET) else drawn
+}
+
+/** [text] without the game's colour and style codes, as the log file has it. */
+fun gameUncoloured(text: String) = text.replace(GAME_CODE, "")
 
 /** Whether [event] has what players typed in it, which is never highlighted, whatever backticks they typed. */
 private fun typedByPlayers(event: ILoggingEvent) = event.loggerName == CHAT || event.loggerName == COMMANDS
@@ -67,16 +122,26 @@ class GreyConverter : CompositeConverter<ILoggingEvent>() {
     override fun transform(event: ILoggingEvent, text: String): String = coloured(GREY, text)
 }
 
-/** What a line says, with the words in backticks in yellow, as the console shows it: `%highlightedMessage`. */
+/**
+ * What a line says, with the words in backticks in yellow, and the game's
+ * colours, like a renamed sword's, as the console shows it:
+ * `%highlightedMessage`.
+ */
 class HighlightedMessageConverter : ClassicConverter() {
-    override fun convert(event: ILoggingEvent): String =
-        if (typedByPlayers(event)) event.formattedMessage else HIGHLIGHTED.replace(event.formattedMessage) { coloured(YELLOW, it.groupValues[1]) }
+    override fun convert(event: ILoggingEvent): String = gameColoured(
+        if (typedByPlayers(event)) event.formattedMessage else HIGHLIGHTED.replace(event.formattedMessage) { coloured(YELLOW, it.groupValues[1]) },
+    )
 }
 
-/** What a line says, without the backticks that highlight words in the console, as the log file has it: `%plainMessage`. */
+/**
+ * What a line says, without the backticks that highlight words in the
+ * console, or the game's colour codes, as the log file has it:
+ * `%plainMessage`.
+ */
 class PlainMessageConverter : ClassicConverter() {
-    override fun convert(event: ILoggingEvent): String =
-        if (typedByPlayers(event)) event.formattedMessage else HIGHLIGHTED.replace(event.formattedMessage) { it.groupValues[1] }
+    override fun convert(event: ILoggingEvent): String = gameUncoloured(
+        if (typedByPlayers(event)) event.formattedMessage else HIGHLIGHTED.replace(event.formattedMessage) { it.groupValues[1] },
+    )
 }
 
 /**
