@@ -613,6 +613,14 @@ private const val PLAYER_ENTITY = "minecraft:player"
 /** The message for a player who died, as `/kill` kills them. */
 private const val DIED = "death.attack.generic"
 
+/** A Totem of Undying, and what it gives the player it saves, for how many ticks, as Bedrock has it. */
+private const val TOTEM = "minecraft:totem_of_undying"
+private val TOTEM_EFFECTS = listOf(
+    EffectLevel(Effect.REGENERATION, 1) to 45 * 20,
+    EffectLevel(Effect.FIRE_RESISTANCE) to 40 * 20,
+    EffectLevel(Effect.ABSORPTION, 1) to 5 * 20,
+)
+
 /** The game's names for a player's health and hunger, as attributes. */
 private const val HEALTH = "minecraft:health"
 private const val FOOD = "minecraft:player.hunger"
@@ -3421,7 +3429,8 @@ class Session(
      * armour wears from it. They and everyone who sees them see them flinch,
      * but from a harder hurt in the grace, and if it's the end of them, they
      * die of it, at the hands of [by], if another player hit them, with
-     * [weapon]. Returns whether it hurt them.
+     * [weapon], unless a Totem of Undying saves them, as anything but the
+     * void can be saved from. Returns whether it hurt them.
      */
     fun hurt(amount: Float, cause: DamageCause, by: Session? = null, weapon: ItemStack? = null): Boolean {
         if (!isInGame || dead || !hurtable) return false
@@ -3435,8 +3444,39 @@ class Session(
         sendHealth()
         if (fresh) viewers().filter { it.isInGame }.forEach { it.showHurt(entityId, cause) }
         log.debug("{} was hurt by {} of {}, down to {}", name, damage, cause.name.lowercase(), vitals.health)
-        if (vitals.isDead) die(cause.message, killer = by?.name, weapon = weapon?.customName)
+        if (!vitals.isDead) return true
+        // The void takes a player whatever they hold.
+        if (!cause.void && useTotem()) return true
+        die(cause.message, killer = by?.name, weapon = weapon?.customName)
         return true
+    }
+
+    /**
+     * Saves the player from dying with a Totem of Undying, in their offhand
+     * or else their hand, which it uses up: they're left with half a heart
+     * and none of their effects, but Regeneration II, Fire Resistance and
+     * Absorption II from the totem. They see it rise before their eyes, and
+     * everyone around sees its particles and hears it. Returns whether it
+     * saved them.
+     */
+    private fun useTotem(): Boolean {
+        val (container, slot, window) = listOf(Triple(inventory.offhand, 0, OFFHAND_WINDOW), Triple(inventory.items, heldSlot, INVENTORY_WINDOW))
+            .firstOrNull { (container, slot) -> container[slot]?.stack?.item?.name == TOTEM } ?: return false
+        container[slot] = null
+        send(InventorySlot(slot, null, 0, window))
+        vitals.health = 1f
+        takeEffects()
+        for ((effect, ticks) in TOTEM_EFFECTS) giveEffect(effect, ticks, ambient = false)
+        sendHealth()
+        viewers().filter { it.isInGame }.forEach { it.showTotem(entityId) }
+        showAround(position.toBlockPos(), LevelEvent(LevelEvent.SOUND_TOTEM_USED, position, 0))
+        log.debug("{} was saved by a totem", name)
+        return true
+    }
+
+    /** Shows the client the player [entityId] saved by a totem, if it's its own player or one it can see. */
+    private fun showTotem(entityId: Long) {
+        if (entityId == this.entityId || entityId in shownPlayers) send(ActorEvent(entityId, ActorEvent.TALISMAN_ACTIVATE, 0))
     }
 
     /**

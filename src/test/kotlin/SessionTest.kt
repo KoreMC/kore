@@ -162,6 +162,7 @@ private const val MILK_ITEM = 393
 private const val CHORUS_ITEM = 597
 private const val CANDLE_ITEM = 662
 private const val SWORD_ITEM = 320
+private const val TOTEM_ITEM = 568
 
 /** The PlayerAction for breaking a block in creative. */
 private const val CREATIVE_DESTROY_BLOCK = 13
@@ -271,6 +272,7 @@ class SessionTest {
     )
     private val candle = ItemDefinition("minecraft:candle", CANDLE_ITEM, componentBased = false, ItemVersion.NONE)
     private val sword = ItemDefinition("minecraft:iron_sword", SWORD_ITEM, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 250)
+    private val totem = ItemDefinition("minecraft:totem_of_undying", TOTEM_ITEM, componentBased = false, ItemVersion.NONE, maxStackSize = 1)
 
     private val sent = mutableListOf<ByteArray>()
 
@@ -281,7 +283,7 @@ class SessionTest {
     private val mining = mapOf(stone.name to Mining(1.5, ToolKind.PICKAXE, harvestTier = 0))
     private val game = GameData(
         world, listOf(itemRegistry, biomes), blockDefinitions, creative, mining, Drops(creative.items.map { it.stack.item }, creative, palette),
-        ItemStacks(creative.items.map { it.stack.item } + pickaxe + hoe + poppyItem + waterBucket + bucket + disc + helmet + zombieHeadItem + apple + stew + bowl + potion + glassBottle + milk + chorusFruit + candle + sword, creative, palette),
+        ItemStacks(creative.items.map { it.stack.item } + pickaxe + hoe + poppyItem + waterBucket + bucket + disc + helmet + zombieHeadItem + apple + stew + bowl + potion + glassBottle + milk + chorusFruit + candle + sword + totem, creative, palette),
     )
     private val session: Session by lazy {
         // The only player, so the only one to see what they change.
@@ -1358,6 +1360,27 @@ class SessionTest {
         session.tickHealth()
         assertEquals(0, session.vitals.fireTicks)
         assertTrue(receivedPackets().any { it.contentEquals(LevelSoundEvent("fizz", standing, -1).encode()) })
+    }
+
+    @Test
+    fun `a Totem of Undying in hand saves a player from dying, used up, with its effects, but not from the void`() {
+        spawn()
+        session.give(ItemStack(totem))
+        session.vitals.health = 2f
+        sent.clear()
+
+        session.hurt(5f, DamageCause.FALL)
+        assertFalse(session.dead)
+        assertEquals(1f, session.vitals.health)
+        assertEquals(8f, session.vitals.absorption)
+        assertNull(session.heldStack)
+        val got = receivedPackets()
+        assertTrue(got.any { it.contentEquals(ActorEvent(7, ActorEvent.TALISMAN_ACTIVATE, 0).encode()) })
+        assertTrue(got.any { it.contentEquals(MobEffect(7, MobEffect.ADD, Effect.REGENERATION, 1, 900).encode()) })
+
+        session.give(ItemStack(totem))
+        session.hurt(100f, DamageCause.VOID)
+        assertTrue(session.dead)
     }
 
     @Test

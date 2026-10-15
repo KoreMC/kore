@@ -213,6 +213,9 @@ data class ActorEvent(val entityId: Long, val event: Int, val data: Int) : Serve
         /** An entity that died coming back to life, as a player respawning does: it stands up again, whole. */
         const val SPAWN_ALIVE = 18
 
+        /** A Totem of Undying saving an entity: its particles, and for the player it saved, the totem rising before their eyes. */
+        const val TALISMAN_ACTIVATE = 65
+
         /**
          * A player eating or drinking, which the client sends every few
          * ticks while it does: the sound of it, and the bits of what they

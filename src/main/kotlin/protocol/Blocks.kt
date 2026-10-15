@@ -233,6 +233,9 @@ data class LevelEvent(val event: Int, val position: Vec3, val data: Int) : Serve
         /** The chime of a player picking up experience. */
         const val SOUND_EXPERIENCE_ORB = 1051
 
+        /** The sound of a Totem of Undying saving someone. */
+        const val SOUND_TOTEM_USED = 1052
+
         /**
          * Cracks spreading over a block as it's broken. The data is how much
          * of the way they get each tick, out of 65535, and the client carries
