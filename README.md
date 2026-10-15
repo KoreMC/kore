@@ -51,11 +51,12 @@ Kore is not a fork, a wrapper, or a port of an existing server. It's a ground-up
 **Requirements:** JDK 25. Gradle downloads a matching toolchain if you don't have one.
 
 ```bash
-git clone --recurse-submodules https://github.com/KoreMC/data.git
+git clone --recurse-submodules https://github.com/KoreMC/kore.git
+cd kore
 ./gradlew run
 ```
 
-The second clone fetches the game data Kore needs, for the same client release (1.26.50, protocol `2193`). `./gradlew jar` builds a single jar with the data inside, to run anywhere with `java -jar`.
+The game data Kore needs comes with it, as the `data` submodule, for the same client release (1.26.50, protocol `2193`). `./gradlew jar` builds a single jar with the data inside, to run anywhere with `java -jar`.
 
 Kore uses port `19132` for signaling (TCP) and gameplay (UDP), so open both in your firewall.
 

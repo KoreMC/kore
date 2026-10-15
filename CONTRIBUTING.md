@@ -23,13 +23,13 @@ Thanks for your interest in Kore. The project is deliberately small, and keeping
 You need **JDK 25**. Gradle provisions a matching toolchain if it isn't installed. IntelliJ IDEA is recommended and picks up the project code style automatically.
 
 ```bash
-git clone https://github.com/KoreMC/data.git data   # the game data Kore reads on start
-./gradlew build   # compile and run all tests
-./gradlew test    # tests only
-./gradlew run     # start the server on TCP 19132
+git submodule update --init   # the game data Kore reads on start, if you cloned without --recurse-submodules
+./gradlew build               # compile and run all tests
+./gradlew test                # tests only
+./gradlew run                 # start the server on TCP 19132
 ```
 
-The server won't start without `data/`. Tests that check against the real game data are skipped without it, so clone it before you trust a green build.
+The server won't start without `data/`. Tests that check against the real game data are skipped without it, so check it out before you trust a green build. A change that needs new game data goes to [KoreMC/data](https://github.com/KoreMC/data) first, then moves the submodule here in the same pull request as the code that uses it.
 
 ## Code Standards
 
