@@ -466,8 +466,14 @@ private fun decodePlayerAuthInput(buffer: ByteBuf): PlayerAuthInput {
 
 fun decodeClientPacket(packet: ByteArray): ClientPacket {
     val buffer = Unpooled.wrappedBuffer(packet)
+    val id = try {
+        buffer.readVarUInt() and PACKET_ID_MASK
+    } catch (e: IndexOutOfBoundsException) {
+        throw PacketException("packet ends before its ID")
+    }
+    // Which packet it was, for working out what in it Kore misreads.
     return try {
-        when (val id = buffer.readVarUInt() and PACKET_ID_MASK) {
+        when (id) {
             REQUEST_NETWORK_SETTINGS -> RequestNetworkSettings(protocol = buffer.readInt())
             LOGIN -> Login(protocol = buffer.readInt(), connectionRequest = buffer.readByteArray())
             CLIENT_CACHE_STATUS -> ClientCacheStatus(supported = buffer.readBoolean())
@@ -501,7 +507,9 @@ fun decodeClientPacket(packet: ByteArray): ClientPacket {
             else -> UnhandledPacket(id, ByteBufUtil.getBytes(buffer))
         }
     } catch (e: IndexOutOfBoundsException) {
-        throw PacketException("packet ends early")
+        throw PacketException("packet $id ends early")
+    } catch (e: PacketException) {
+        throw PacketException("packet $id: ${e.message}")
     }
 }
 

@@ -44,12 +44,19 @@ data class Features(
      * they're only items, and cake only a block.
      */
     val food: Boolean = true,
+    /**
+     * Players hitting each other: the hit's damage, by weapon, Sharpness,
+     * Strength and Weakness, critical hits, knockback and Fire Aspect, and
+     * weapons wearing from it. Off, a hit does nothing. The pvp game rule
+     * turns it off too, for a while.
+     */
+    val combat: Boolean = true,
 ) {
     /** The names of the systems switched off, as kore.json names them. */
     val off: List<String>
         get() = listOfNotNull(
             "redstone".takeUnless { redstone }, "liquids".takeUnless { liquids }, "fallingBlocks".takeUnless { fallingBlocks },
             "growth".takeUnless { growth }, "machines".takeUnless { machines }, "damage".takeUnless { damage },
-            "hunger".takeUnless { hunger }, "food".takeUnless { food },
+            "hunger".takeUnless { hunger }, "food".takeUnless { food }, "combat".takeUnless { combat },
         )
 }

@@ -125,6 +125,7 @@ Packages leave out the common root, so `org.koremc.network` lives in `src/main/k
 - [x] Growth, time and weather
 - [x] Health, damage and respawning
 - [x] Hunger and eating
+- [x] Players fighting each other
 - [ ] Mobs
 - [ ] The rest of the game's commands
 

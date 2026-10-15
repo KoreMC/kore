@@ -45,6 +45,8 @@ enum class DamageCause(
     SUFFOCATION(4, "death.attack.inWall", armour = false),
     DROWNING(9, "death.attack.drown", armour = false),
     LIGHTNING(24, "death.attack.lightningBolt", armour = true),
+    // A hit from another player, whose name the message has too.
+    ATTACK(2, "death.attack.player", armour = true),
     MAGIC(14, "death.attack.magic", armour = false),
     WITHER(15, "death.attack.wither", armour = false),
     STARVATION(16, "death.attack.starve", armour = false, resisted = false),
@@ -130,6 +132,9 @@ class Vitals {
     private var lastHurt = 0f
 
     val isDead get() = health <= 0
+
+    /** Whether the grace after the last hurt is still on, when only a harder one hurts, and by only as much harder as it is. */
+    val inGrace get() = grace > 0
 
     /**
      * Takes [damage], from absorption first and then health, unless the

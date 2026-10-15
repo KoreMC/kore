@@ -210,6 +210,9 @@ data class ActorEvent(val entityId: Long, val event: Int, val data: Int) : Serve
         /** An entity dying: it falls over, tinted red. */
         const val DEATH = 3
 
+        /** An entity that died coming back to life, as a player respawning does: it stands up again, whole. */
+        const val SPAWN_ALIVE = 18
+
         /**
          * A player eating or drinking, which the client sends every few
          * ticks while it does: the sound of it, and the bits of what they

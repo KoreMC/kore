@@ -9,6 +9,7 @@ import org.koremc.auth.MultiplayerTokenVerifier
 import org.koremc.auth.TestAuthority
 import org.koremc.auth.ecKeyPair
 import org.koremc.protocol.ActorDataId
+import org.koremc.protocol.ActorEvent
 import org.koremc.protocol.ActorFlag
 import org.koremc.protocol.Animate
 import org.koremc.protocol.BatchCodec
@@ -19,7 +20,9 @@ import org.koremc.protocol.LevelSoundEvent
 import org.koremc.protocol.MovePlayer
 import org.koremc.protocol.OFFHAND_WINDOW
 import org.koremc.protocol.RemoveActor
+import org.koremc.protocol.Respawn
 import org.koremc.protocol.SetActorData
+import org.koremc.protocol.SetActorMotion
 import org.koremc.protocol.ShowArmour
 import org.koremc.protocol.ShowEquipment
 import org.koremc.protocol.Text
@@ -47,9 +50,13 @@ import org.koremc.registry.ItemDefinition
 import org.koremc.registry.ItemStack
 import org.koremc.registry.ItemStacks
 import org.koremc.registry.ItemVersion
+import org.koremc.registry.damage
+import org.koremc.registry.withCustomName
 import org.koremc.storage.PlayerSaves
 import org.koremc.world.BlockPos
+import org.koremc.world.DamageCause
 import org.koremc.world.Drops
+import org.koremc.world.Features
 import org.koremc.world.FlatWorld
 import org.koremc.world.Vec3
 import java.security.interfaces.ECPublicKey
@@ -72,6 +79,9 @@ private const val MOB_ARMOR_EQUIPMENT = 32
 /** The input flag set on every tick a player sneaks. */
 private const val SNEAKING = 8
 
+/** The network ID of the diamond sword the tests hit with. */
+private const val SWORD = 4
+
 class PlayersTest {
     private val authority = TestAuthority()
     private val authenticator = LoginAuthenticator(MultiplayerTokenVerifier(keys = { authority.keys }), onlineMode = true)
@@ -84,12 +94,13 @@ class PlayersTest {
     private val helmet = item("minecraft:iron_helmet", 1)
     private val chestplate = item("minecraft:iron_chestplate", 2)
     private val shield = item("minecraft:shield", 3)
+    private val sword = ItemDefinition("minecraft:diamond_sword", SWORD, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 1561)
 
     /** What every player had when they last left, or null for players new to the world. */
     private var saved: NbtMap? = null
     private val game = GameData(
         world, emptyList(), org.koremc.protocol.BlockDefinitions(emptyList()), creative, emptyMap(), Drops(emptyList(), creative, palette),
-        items = ItemStacks(listOf(helmet, chestplate, shield), creative, palette),
+        items = ItemStacks(listOf(helmet, chestplate, shield, sword), creative, palette),
         players = object : PlayerSaves {
             override fun load(player: UUID) = saved
 
@@ -155,6 +166,16 @@ class PlayersTest {
                     .writeVarUInt(inputs.size).apply { inputs.forEach { writeVarInt(it) } }
                     .writeVarUInt(1).writeVarUInt(0).writeVarInt(1).writeZero(8)
                     .writeVarULong(100).writeZero(12).writeZero(5).writeZero(28),
+            ),
+        )
+
+        /** Hits the player [target] with the item [held] in hotbar [slot], or a bare hand, for 0, as the client says. */
+        fun attacks(target: Long, held: Int = 0, slot: Int = 0) = sends(
+            ByteBufUtil.getBytes(
+                Unpooled.buffer().writeVarUInt(30).writeVarInt(0).writeBoolean(false).writeVarUInt(3).writeVarUInt(0)
+                    .writeVarULong(target).writeVarInt(1).writeVarInt(slot)
+                    .writeShortLE(held).writeShortLE(if (held == 0) 0 else 1).writeVarUInt(0).writeBoolean(false).writeVarUInt(0).writeByteArray(ByteArray(0))
+                    .writeZero(24), // Where they stood, and where they hit
             ),
         )
 
@@ -226,6 +247,107 @@ class PlayersTest {
         alex.sends(ByteBufUtil.getBytes(Unpooled.buffer().writeVarUInt(44).writeByte(1).writeVarULong(2).writeFloatLE(0f).writeBoolean(true).writeString("mine")))
         assertContentEquals(Animate(Animate.SWING_ARM, 2, swingSource = "mine").encode(), steve.received().single())
         assertTrue(alex.received().isEmpty()) // Their own client already showed it
+    }
+
+    @Test
+    fun `a player hits another with what they hold, hurting them by it and knocking them away, and the weapon wears`() {
+        val steve = Client(1, "Steve", "1111")
+        val alex = Client(2, "Alex", "2222")
+        alex.moves(Vec3(2.5f, -61.38f, 0.5f))
+        tick()
+        steve.session.give(ItemStack(sword))
+        alex.received()
+
+        steve.attacks(2, held = SWORD)
+        assertEquals(12f, alex.session.vitals.health)
+        assertEquals(1, steve.session.heldStack?.damage)
+        val got = alex.received()
+        assertTrue(got.any { it.contentEquals(ActorEvent(2, ActorEvent.HURT, DamageCause.ATTACK.id).encode()) })
+        assertTrue(got.any { it.contentEquals(SetActorMotion(2, Vec3(0.45f, 0.3608f, 0f)).encode()) })
+
+        // Straight after, in the grace, a hit no harder does nothing.
+        steve.attacks(2, held = SWORD)
+        assertEquals(12f, alex.session.vitals.health)
+    }
+
+    @Test
+    fun `a hit struck falling is critical, half again harder, with sparks for everyone to see`() {
+        val steve = Client(1, "Steve", "1111")
+        val alex = Client(2, "Alex", "2222")
+        alex.moves(Vec3(2.5f, -61.38f, 0.5f))
+        tick()
+        steve.moves(Vec3(0.5f, -59.38f, 0.5f))
+        steve.moves(Vec3(0.5f, -60.38f, 0.5f))
+        alex.received()
+
+        steve.attacks(2)
+        assertEquals(18.5f, alex.session.vitals.health)
+        assertTrue(alex.received().any { it.contentEquals(Animate(Animate.CRITICAL_HIT, 2).encode()) })
+    }
+
+    @Test
+    fun `a player killed by another was slain by them, as everyone hears`() {
+        val steve = Client(1, "Steve", "1111")
+        val alex = Client(2, "Alex", "2222")
+        tick()
+        alex.session.vitals.health = 1f
+        steve.received()
+
+        steve.attacks(2)
+        assertTrue(alex.session.dead)
+        val slain = Text(Text.TRANSLATION, "%death.attack.player", parameters = listOf("Alex", "Steve"), needsTranslation = true)
+        assertTrue(steve.received().any { it.contentEquals(slain.encode()) })
+    }
+
+    @Test
+    fun `a player who respawns gets up for those who saw them die, rather than going and coming back, which loses skins`() {
+        val steve = Client(1, "Steve", "1111")
+        val alex = Client(2, "Alex", "2222")
+        tick()
+        alex.session.vitals.health = 1f
+        steve.attacks(2)
+        steve.received()
+
+        alex.sends(ByteBufUtil.getBytes(Unpooled.buffer().writeVarUInt(45).writeZero(12).writeByte(Respawn.CLIENT_READY_TO_SPAWN).writeVarULong(2)))
+        tick()
+        val got = steve.received()
+        assertTrue(got.any { it.contentEquals(ActorEvent(2, ActorEvent.SPAWN_ALIVE, 0).encode()) })
+        assertTrue(got.none { it.contentEquals(RemoveActor(2).encode()) })
+        assertFalse(alex.session.dead)
+        // Their size again, which the client shrank as they fell, or their hitbox stays down by their feet.
+        val standing = setOf(ActorFlag.BREATHING, ActorFlag.HAS_GRAVITY, ActorFlag.HAS_COLLISION, ActorFlag.CAN_CLIMB, ActorFlag.SHOW_NAME, ActorFlag.ALWAYS_SHOW_NAME)
+        val size = SetActorData(2, listOf(flagsItem(standing), FloatItem(ActorDataId.WIDTH, 0.6f), FloatItem(ActorDataId.HEIGHT, 1.8f)))
+        assertTrue(got.any { it.contentEquals(size.encode()) })
+    }
+
+    @Test
+    fun `a player killed with a named weapon was slain using it, by its name`() {
+        val steve = Client(1, "Steve", "1111")
+        val alex = Client(2, "Alex", "2222")
+        tick()
+        steve.session.give(ItemStack(sword).withCustomName("Super Swatter"))
+        alex.session.vitals.health = 1f
+        steve.received()
+
+        steve.attacks(2, held = SWORD)
+        val slain = Text(Text.TRANSLATION, "%death.attack.player.item", parameters = listOf("Alex", "Steve", "Super Swatter"), needsTranslation = true)
+        assertTrue(steve.received().any { it.contentEquals(slain.encode()) })
+    }
+
+    @Test
+    fun `with the pvp rule off, or combat switched off, a hit does nothing`() {
+        val steve = Client(1, "Steve", "1111")
+        val alex = Client(2, "Alex", "2222")
+        tick()
+
+        world.rules.set("pvp", false)
+        steve.attacks(2)
+        assertEquals(20f, alex.session.vitals.health)
+
+        world.rules.set("pvp", true)
+        world.features = Features(combat = false)
+        steve.attacks(2)
+        assertEquals(20f, alex.session.vitals.health)
     }
 
     @Test

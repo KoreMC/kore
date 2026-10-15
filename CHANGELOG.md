@@ -4,6 +4,9 @@ Each release, newest first, with the client version it's for. What's done since 
 
 ## Unreleased
 
+- Players fight each other: hits hurt by the weapon, with Sharpness, Strength and Weakness, critical hits, knockback and Fire Aspect.
+  The pvp game rule and a `combat` switch in `kore.json` turn it off
+
 ## 0.1.0
 
 The first release, for Minecraft Bedrock **1.26.50** (protocol 2193). Kore is early: play it with friends, not on a public server yet.

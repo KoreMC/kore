@@ -14,6 +14,7 @@ object Effect {
     const val FIRE_RESISTANCE = 12
     const val WATER_BREATHING = 13
     const val INVISIBILITY = 14
+    const val BLINDNESS = 15
     const val NIGHT_VISION = 16
     const val HUNGER = 17
     const val WEAKNESS = 18
@@ -22,6 +23,7 @@ object Effect {
     const val HEALTH_BOOST = 21
     const val ABSORPTION = 22
     const val SATURATION = 23
+    const val LEVITATION = 24
     const val FATAL_POISON = 25
     const val SLOW_FALLING = 26
     const val CONDUIT_POWER = 27

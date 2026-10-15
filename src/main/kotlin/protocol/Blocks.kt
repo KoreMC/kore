@@ -53,11 +53,29 @@ data class ItemUse(
 )
 
 /**
+ * The player using their held item on the entity [target], by its runtime
+ * ID: attacking it, or interacting with it, as [action] says.
+ */
+data class ItemUseOnEntity(
+    val target: Long,
+    val action: Int,
+    val hotbarSlot: Int,
+    /** The runtime ID of the item the client says the player holds, or 0 for none. */
+    val heldItem: Int,
+) {
+    companion object {
+        const val INTERACT = 0
+        const val ATTACK = 1
+    }
+}
+
+/**
  * A transaction from the inventory system that came before item stack
  * requests. The client still sends one when the player uses an item on a
- * block, which Kore reads as [use], and when they drop what's in a hotbar
- * slot outside the inventory screen, by pressing Q, which is a [NORMAL]
- * one. Its [actions] are the slot changes the client predicts.
+ * block, which Kore reads as [use], or on an entity, as [useOnEntity], and
+ * when they drop what's in a hotbar slot outside the inventory screen, by
+ * pressing Q, which is a [NORMAL] one. Its [actions] are the slot changes
+ * the client predicts.
  */
 data class InventoryTransaction(
     val type: Int,
@@ -68,6 +86,7 @@ data class InventoryTransaction(
      * it hears what they hold now: below zero and even, or 0 for none.
      */
     val legacyRequestId: Int = 0,
+    val useOnEntity: ItemUseOnEntity? = null,
 ) : ClientPacket {
     companion object {
         /** Items moving between slots, without anything else happening. */
@@ -75,6 +94,9 @@ data class InventoryTransaction(
 
         /** An item used on a block. */
         const val USE_ITEM = 2
+
+        /** An item used on an entity, like a sword hitting a player. */
+        const val USE_ITEM_ON_ENTITY = 3
 
         /** The player letting go of what they were using, like food they were eating. */
         const val RELEASE_ITEM = 4
@@ -286,7 +308,10 @@ internal fun decodeInventoryTransaction(buffer: ByteBuf): InventoryTransaction {
     val legacyRequestId = buffer.readLegacyRequest()
     val type = buffer.readVarUInt()
     val actions = buffer.readActions()
-    return InventoryTransaction(type, actions, if (type == InventoryTransaction.USE_ITEM) buffer.readItemUse() else null, legacyRequestId)
+    return InventoryTransaction(
+        type, actions, if (type == InventoryTransaction.USE_ITEM) buffer.readItemUse() else null, legacyRequestId,
+        useOnEntity = if (type == InventoryTransaction.USE_ITEM_ON_ENTITY) buffer.readItemUseOnEntity() else null,
+    )
 }
 
 internal fun decodePlayerAction(buffer: ByteBuf): PlayerAction {
@@ -329,6 +354,17 @@ private fun ByteBuf.readActions() = readList {
     val windowId = if (readBoolean()) readByte().toInt() else null
     if (readBoolean()) readVarUInt() // Flags, for items from the world
     InventoryAction(source, windowId, slot = readVarUInt(), before = readClientItem(), after = readClientItem())
+}
+
+private fun ByteBuf.readItemUseOnEntity(): ItemUseOnEntity {
+    val target = readVarULong()
+    val action = readVarInt()
+    val hotbarSlot = readVarInt()
+    // Unlike a use on a block, it doesn't say which hand holds the item: 1.26.60 adds that.
+    val heldItem = readClientItem().runtimeId
+    readVec3() // Where the player was
+    readVec3() // Where they hit it
+    return ItemUseOnEntity(target, action, hotbarSlot, heldItem)
 }
 
 private fun ByteBuf.readItemUse(): ItemUse {

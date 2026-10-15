@@ -71,6 +71,8 @@ private val COMMENTS = mapOf(
         "Off, it stays full.",
     "features.food" to "Eating and drinking: food and cake filling the food bar, and what food, potions and milk give, like a golden apple's effects.\n" +
         "Off, they're only items, and cake only a block.",
+    "features.combat" to "Players hitting each other: damage by weapon, enchantments and effects, critical hits, knockback and Fire Aspect.\n" +
+        "Off, a hit does nothing. The pvp game rule turns it off too, for a while.",
     "commandLimits" to "The most blocks a command changes at once: a number, true for the game's own limit, or false for none.\n" +
         "Past the game's own, a big fill or clone can hold the server up a moment as it works, and players' games as they take it in.",
     "commandLimits.fill" to "The most blocks /fill fills. The game's own limit is 32768.",

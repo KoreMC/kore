@@ -238,6 +238,10 @@ data class Animate(val action: Int, val entityId: Long, val data: Float = 0f, va
 
     companion object {
         const val SWING_ARM = 1
+
+        /** The sparks of a critical hit, around the entity hit, and the glints of an enchanted weapon's hit. */
+        const val CRITICAL_HIT = 4
+        const val MAGIC_CRITICAL_HIT = 5
     }
 }
 

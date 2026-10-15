@@ -18,13 +18,14 @@ val GAME_RULE_DEFAULTS: Map<String, Any> = linkedMapOf(
 
 /**
  * The rules that do something in Kore so far, which `/gamerule` offers:
- * those it runs, and those the client draws for itself. The rest are
- * still kept with the world and sent to clients, as the game does, so a
- * world keeps its settings either way.
+ * those it runs, and those the client sees to itself, like showing
+ * coordinates, or respawning straight away, which its death screen does
+ * by itself. The rest are still kept with the world and sent to clients,
+ * as the game does, so a world keeps its settings either way.
  */
 val GAME_RULES_IN_USE = setOf(
-    "doDaylightCycle", "doFireTick", "doTileDrops", "doWeatherCycle", "drowningDamage", "fallDamage", "fireDamage", "keepInventory",
-    "naturalRegeneration", "randomTickSpeed", "showCoordinates", "showDaysPlayed", "showDeathMessages",
+    "doDaylightCycle", "doFireTick", "doImmediateRespawn", "doTileDrops", "doWeatherCycle", "drowningDamage", "fallDamage", "fireDamage",
+    "keepInventory", "naturalRegeneration", "pvp", "randomTickSpeed", "showCoordinates", "showDaysPlayed", "showDeathMessages",
 )
 
 /**
@@ -82,6 +83,9 @@ class GameRules(saved: Map<String, Any> = emptyMap()) {
     val fallDamage get() = values["falldamage"] == true
     val fireDamage get() = values["firedamage"] == true
     val drowningDamage get() = values["drowningdamage"] == true
+
+    /** Whether players can hurt each other. */
+    val pvp get() = values["pvp"] == true
 
     /** Whether players heal over time by themselves. */
     val naturalRegeneration get() = values["naturalregeneration"] == true

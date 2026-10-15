@@ -80,6 +80,7 @@ import org.koremc.protocol.ItemStackRequest
 import org.koremc.protocol.ItemStackResponse
 import org.koremc.protocol.ItemUse
 import org.koremc.protocol.ItemUseAction
+import org.koremc.protocol.ItemUseOnEntity
 import org.koremc.protocol.JigsawStructureData
 import org.koremc.protocol.LIGHTNING_BOLT
 import org.koremc.protocol.LecternUpdate
@@ -161,21 +162,25 @@ import org.koremc.registry.AIR
 import org.koremc.registry.AIR_NETWORK_ID
 import org.koremc.registry.BlockState
 import org.koremc.registry.EFFICIENCY
+import org.koremc.registry.FIRE_ASPECT
 import org.koremc.registry.FIRE_PROTECTION
 import org.koremc.registry.FROST_WALKER
 import org.koremc.registry.Food
 import org.koremc.registry.FoodAction
 import org.koremc.registry.ItemStack
 import org.koremc.registry.ItemStacks
+import org.koremc.registry.KNOCKBACK
 import org.koremc.registry.MENDING
 import org.koremc.registry.RESPIRATION
 import org.koremc.registry.VANISHING
+import org.koremc.registry.customName
 import org.koremc.registry.damage
 import org.koremc.registry.levelOf
 import org.koremc.registry.mendedBy
 import org.koremc.registry.sameKindAs
 import org.koremc.registry.suspiciousStewEffect
 import org.koremc.registry.worn
+import org.koremc.world.ATTACK_EXHAUSTION
 import org.koremc.world.BARREL
 import org.koremc.world.BARREL_OPEN
 import org.koremc.world.BEACON_INTERVAL
@@ -209,6 +214,7 @@ import org.koremc.world.Effects
 import org.koremc.world.ExperienceOrb
 import org.koremc.world.FALLING_BLOCK_SIZE
 import org.koremc.world.FILLED_MAP
+import org.koremc.world.FIRE_ASPECT_TICKS
 import org.koremc.world.FIRE_CHARGE
 import org.koremc.world.FLINT_AND_STEEL
 import org.koremc.world.FURNACE_FUEL
@@ -230,6 +236,9 @@ import org.koremc.world.INFINITE_EFFECT
 import org.koremc.world.ItemEntity
 import org.koremc.world.ItemUsedOn
 import org.koremc.world.JUMP_EXHAUSTION
+import org.koremc.world.KNOCKBACK_FORCE
+import org.koremc.world.KNOCKBACK_HEIGHT
+import org.koremc.world.KNOCKBACK_PER_LEVEL
 import org.koremc.world.LOCATOR
 import org.koremc.world.Liquid
 import org.koremc.world.MAX_BERRY_GROWTH
@@ -272,17 +281,21 @@ import org.koremc.world.WRITABLE_BOOK
 import org.koremc.world.WRITTEN_BOOK
 import org.koremc.world.armourOf
 import org.koremc.world.armourWear
+import org.koremc.world.attackDamage
 import org.koremc.world.beaconLevel
 import org.koremc.world.bit
 import org.koremc.world.biteCake
 import org.koremc.world.blockPlacedBy
 import org.koremc.world.breakBlock
 import org.koremc.world.breakTicks
+import org.koremc.world.breaksInCreative
 import org.koremc.world.cauldronNudge
 import org.koremc.world.centre
 import org.koremc.world.chestHalves
 import org.koremc.world.chunksAround
 import org.koremc.world.corner
+import org.koremc.world.critical
+import org.koremc.world.critsWith
 import org.koremc.world.damageAfter
 import org.koremc.world.dispenserKind
 import org.koremc.world.drawMap
@@ -317,6 +330,7 @@ import org.koremc.world.isNoteBlock
 import org.koremc.world.isSign
 import org.koremc.world.isWet
 import org.koremc.world.knockBookOff
+import org.koremc.world.knockbackResistance
 import org.koremc.world.landOn
 import org.koremc.world.lecternBook
 import org.koremc.world.less
@@ -344,6 +358,7 @@ import org.koremc.world.restoreBlockData
 import org.koremc.world.savedBlockEntitiesIn
 import org.koremc.world.setBeaconPowers
 import org.koremc.world.settle
+import org.koremc.world.sharpnessDamage
 import org.koremc.world.showing
 import org.koremc.world.side
 import org.koremc.world.signWaxed
@@ -373,8 +388,10 @@ import org.koremc.world.useJukebox
 import org.koremc.world.usePot
 import org.koremc.world.useToolOn
 import org.koremc.world.wearFromBreaking
+import org.koremc.world.wearFromHitting
 import org.koremc.world.wholeExperience
 import org.koremc.world.withBlockData
+import org.koremc.world.withStrength
 import org.koremc.world.writeSign
 import org.slf4j.LoggerFactory
 import java.security.interfaces.ECPublicKey
@@ -583,6 +600,15 @@ private const val JOIN_MESSAGE_DELAY = 10
 /** The messages, in each client's own language, that a player joined or left: yellow, with their name filled in. */
 private const val JOINED = "\u00a7e%multiplayer.player.joined"
 private const val LEFT = "\u00a7e%multiplayer.player.left"
+
+/** How far from a player's eyes they can hit another, in blocks, and further in creative, as the client reaches. */
+private const val ATTACK_REACH = 8f
+private const val CREATIVE_ATTACK_REACH = 14f
+
+/** The sounds of a hit that hurts, and of one that doesn't, as a player makes them. */
+private const val ATTACK_STRONG = "attack.strong"
+private const val ATTACK_NO_DAMAGE = "attack.nodamage"
+private const val PLAYER_ENTITY = "minecraft:player"
 
 /** The message for a player who died, as `/kill` kills them. */
 private const val DIED = "death.attack.generic"
@@ -1909,6 +1935,7 @@ class Session(
         when (packet.type) {
             InventoryTransaction.USE_ITEM -> packet.use?.let { onItemUse(it, tick, packet.legacyRequestId) }
             InventoryTransaction.RELEASE_ITEM -> eating = null
+            InventoryTransaction.USE_ITEM_ON_ENTITY -> packet.useOnEntity?.takeIf { it.action == ItemUseOnEntity.ATTACK }?.let(::attack)
             InventoryTransaction.NORMAL -> onDropFromSlot(packet.actions)
         }
         val acknowledged = if (packet.legacyRequestId != 0) acknowledge(packet) else emptyList()
@@ -2668,9 +2695,10 @@ class Session(
      * Breaks the block at [pos], as the client predicted, if the player
      * can: their game mode breaks blocks and it's in reach. A [creativeOnly]
      * break, like creative's instant one, needs the player to be in
-     * creative. Outside creative, the block mustn't be one only creative
-     * players break, and a break reported at the client's [tick] mustn't
-     * come too soon after the player started on it.
+     * creative, and not to hold a weapon that only hits, like a sword.
+     * Outside creative, the block mustn't be one only creative players
+     * break, and a break reported at the client's [tick] mustn't come too
+     * soon after the player started on it.
      *
      * Everyone with the chunk sees the block go, with its particles and
      * sound: the player too, since the client leaves those to the server.
@@ -2693,7 +2721,8 @@ class Session(
         // Checked before the cracks stop, which forgets when the player started.
         val early = !creative && tooSoon(pos, ticks, tick)
         if (!creative) stopBreaking()
-        if (state == null || !canBuild() || !inReach(pos) || (!creative && (creativeOnly || unbreakable || early))) {
+        val weapon = creative && !breaksInCreative(heldStack?.item?.name)
+        if (state == null || !canBuild() || !inReach(pos) || weapon || (!creative && (creativeOnly || unbreakable || early))) {
             log.debug("Refused {} breaking {} at {}", player?.displayName, state?.name, pos)
             send(UpdateBlock(pos, world.blockAt(pos)))
             return
@@ -3390,21 +3419,105 @@ class Session(
      * can't be hurt, or the grace after their last hurt holds it off: armour,
      * Resistance and protection lessen it, as [damageAfter] works out, and
      * armour wears from it. They and everyone who sees them see them flinch,
-     * and if it's the end of them, they die of it. Returns whether it hurt them.
+     * but from a harder hurt in the grace, and if it's the end of them, they
+     * die of it, at the hands of [by], if another player hit them, with
+     * [weapon]. Returns whether it hurt them.
      */
-    fun hurt(amount: Float, cause: DamageCause): Boolean {
+    fun hurt(amount: Float, cause: DamageCause, by: Session? = null, weapon: ItemStack? = null): Boolean {
         if (!isInGame || dead || !hurtable) return false
         val damage = damageAfter(amount, cause, inventory.armour.contents().map { it?.stack }, effects.level(Effect.RESISTANCE))
+        val fresh = !vitals.inGrace
         vitals.hurt(damage) ?: return false
         if (cause.armour) {
             wearArmour(armourWear(amount))
             exhaust(HURT_EXHAUSTION)
         }
         sendHealth()
-        viewers().filter { it.isInGame }.forEach { it.showHurt(entityId, cause) }
+        if (fresh) viewers().filter { it.isInGame }.forEach { it.showHurt(entityId, cause) }
         log.debug("{} was hurt by {} of {}, down to {}", name, damage, cause.name.lowercase(), vitals.health)
-        if (vitals.isDead) die(cause.message)
+        if (vitals.isDead) die(cause.message, killer = by?.name, weapon = weapon?.customName)
         return true
+    }
+
+    /**
+     * The player hitting another player, [use]'s target, with what they
+     * hold, unless combat's switched off, the pvp rule says no, either of
+     * them is dead, or the other's out of sight or reach. The hit's as hard
+     * as the weapon, by Strength and Weakness, more for Sharpness, and half
+     * again more if it's critical, struck falling. Everyone around hears it.
+     * If it hurts, it knocks the other back, the further for Knockback or a
+     * sprint, unless they're still in the grace after their last hurt, and
+     * sets them burning for Fire Aspect; the weapon wears, and the player
+     * tires.
+     */
+    private fun attack(use: ItemUseOnEntity) {
+        if (!world.features.combat || !world.rules.pvp || dead || gameMode == GameMode.SPECTATOR) return
+        if (use.hotbarSlot in 0 until HOTBAR_SIZE) heldSlot = use.hotbarSlot
+        val target = viewers().find { it.entityId == use.target && it !== this && it.isInGame && !it.dead } ?: return
+        val reach = if (gameMode == GameMode.CREATIVE) CREATIVE_ATTACK_REACH else ATTACK_REACH
+        if (use.target !in shownPlayers || eyes().distanceTo(target.feet) > reach) return
+        val held = heldStack
+        val crit = canCrit(held)
+        val sharpness = sharpnessDamage(held)
+        // A harder hit in the grace after the last hurts by as much harder as it is, but knocks nobody back.
+        val fresh = !target.vitals.inGrace
+        val damage = withStrength(attackDamage(held), effects.level(Effect.STRENGTH), effects.level(Effect.WEAKNESS)) + sharpness
+        val hurt = target.hurt(if (crit) critical(damage) else damage, DamageCause.ATTACK, by = this, weapon = held)
+        val sound = if (hurt) ATTACK_STRONG else ATTACK_NO_DAMAGE
+        showAround(target.feet.toBlockPos(), LevelSoundEvent(sound, target.eyes(), -1, entityType = PLAYER_ENTITY))
+        log.debug("{} hit {} with {}, for {}{}", name, target.name, held?.item?.name ?: "their hand", damage, if (crit) ", critically" else "")
+        if (!hurt) return
+        if (crit) viewers().forEach { it.showHit(target.entityId, Animate.CRITICAL_HIT) }
+        if (sharpness > 0) viewers().forEach { it.showHit(target.entityId, Animate.MAGIC_CRITICAL_HIT) }
+        val knockback = (held?.levelOf(KNOCKBACK) ?: 0) + if (sprinting) 1 else 0
+        if (fresh) target.knockBack(feet, knockback)
+        held?.levelOf(FIRE_ASPECT)?.takeIf { it > 0 }?.let { target.setOnFire(it * FIRE_ASPECT_TICKS) }
+        if (!creative && held != null) wearHeld(wearFromHitting(held.item.name))
+        exhaust(ATTACK_EXHAUSTION)
+    }
+
+    /**
+     * Whether a hit the player makes now is critical: struck falling, with
+     * [held], not a spear, and not flying, gliding, in water, on something
+     * they climb, blind, or slowed or lifted by Slow Falling or Levitation.
+     * Sprinting doesn't stop it, as it does in Java.
+     */
+    private fun canCrit(held: ItemStack?): Boolean {
+        val at = feet.toBlockPos()
+        return critsWith(held?.item?.name) && fallDistance > 0 && !onGround && !flying && !gliding && !world.isWet(at) &&
+            world.stateAt(at)?.name !in CLIMBABLE && effects[Effect.SLOW_FALLING] == null && effects[Effect.BLINDNESS] == null &&
+            effects[Effect.LEVITATION] == null
+    }
+
+    /** Shows the client the player [entityId] hit, by [action], like the sparks of a critical hit, if it's its own player or one it can see. */
+    private fun showHit(entityId: Long, action: Int) {
+        if (entityId == this.entityId || entityId in shownPlayers) send(Animate(action, entityId))
+    }
+
+    /**
+     * Knocks the player back from [from], where whoever hit them stood:
+     * away from there and up, the further for each [extra] level, as of
+     * Knockback, and less for the netherite they wear. The client moves its
+     * player by it.
+     */
+    private fun knockBack(from: Vec3, extra: Int) {
+        var dx = feet.x - from.x
+        var dz = feet.z - from.z
+        val across = sqrt(dx * dx + dz * dz)
+        if (across > 0f) {
+            dx /= across
+            dz /= across
+        }
+        val kept = 1f - knockbackResistance(inventory.armour.contents().map { it?.stack })
+        val force = (KNOCKBACK_FORCE + extra * KNOCKBACK_PER_LEVEL) * kept
+        send(SetActorMotion(entityId, Vec3(dx * force, KNOCKBACK_HEIGHT * kept, dz * force)))
+    }
+
+    /** Sets the player burning for [ticks], as Fire Aspect does, which they and everyone who sees them see at once. */
+    private fun setOnFire(ticks: Int) {
+        val burning = vitals.fireTicks > 0
+        ignite(ticks)
+        if (!burning && vitals.fireTicks > 0) send(SetActorData(entityId, listOf(flagsItem(playerFlags()))))
     }
 
     /** Heals the player by [amount], up to as many hearts as they can have. */
@@ -3652,14 +3765,18 @@ class Session(
     }
 
     /**
-     * The player dying, of [cause], the key of the message that says so.
-     * Everyone around sees them fall over, and a moment later they're gone,
-     * and everyone hears how they died, if the rules say to. They drop what
-     * they had, but what's cursed to vanish, which goes, and some of their
+     * The player dying, of [cause], the key of the message that says so, at
+     * the hands of [killer], if another player killed them, with [weapon],
+     * if it has a name of its own, which the message says too. Everyone
+     * around sees them fall over, and a moment later they're gone, and
+     * everyone hears how they died, if the rules say to. They drop what they
+     * had, but what's cursed to vanish, which goes, and some of their
      * experience, unless the rules keep it, and their effects end. Their
      * screen says how they died, and waits for them to respawn.
      */
-    private fun die(cause: String) {
+    private fun die(cause: String, killer: String? = null, weapon: String? = null) {
+        val message = if (killer != null && weapon != null) "$cause.item" else cause
+        val parameters = listOfNotNull(name, killer, weapon.takeIf { killer != null })
         dead = true
         eating = null
         cooldowns.clear()
@@ -3669,14 +3786,14 @@ class Session(
         vitals.fireTicks = 0
         sendHealth()
         viewers().filter { it.isInGame }.forEach { it.showDeath(entityId) }
-        if (world.rules.showDeathMessages) tellEveryone(Text(Text.TRANSLATION, "%$cause", parameters = listOf(name), needsTranslation = true))
+        if (world.rules.showDeathMessages) tellEveryone(Text(Text.TRANSLATION, "%$message", parameters = parameters, needsTranslation = true))
         if (!world.rules.keepInventory) dropEverything()
         val ended = effects.clear()
         if (ended.isNotEmpty()) send(*ended.map { MobEffect(entityId, MobEffect.REMOVE, it) }.toTypedArray(), visibleEffects())
         effectsEnded(ended)
-        send(DeathInfo(cause, listOf(name)), Respawn(spawnEyes(), Respawn.SEARCHING_FOR_SPAWN, entityId))
+        send(DeathInfo(message, parameters), Respawn(spawnEyes(), Respawn.SEARCHING_FOR_SPAWN, entityId))
         schedule(DEAD_BODY_TICKS) { if (dead) bodyGone = true }
-        if (world.rules.showDeathMessages) deathLog.info(english(cause, listOf(name))) else log.debug("{} died: {}", name, cause)
+        if (world.rules.showDeathMessages) deathLog.info(english(message, parameters)) else log.debug("{} died: {}", name, message)
     }
 
     /** Shows the client the player [entityId] dying, if it's its own player or one it can see. */
@@ -3729,7 +3846,7 @@ class Session(
     /**
      * Brings the player back to life at the world's spawn, once they've
      * chosen to respawn and the client is ready: whole again, where everyone
-     * sees them again.
+     * sees them get up again.
      */
     private fun onRespawn(packet: Respawn) {
         if (!dead || packet.state != Respawn.CLIENT_READY_TO_SPAWN) return
@@ -3741,14 +3858,23 @@ class Session(
         val eyes = spawnEyes()
         send(Respawn(eyes, Respawn.READY_TO_SPAWN, entityId), *playerState())
         teleport(Vec3(eyes.x, eyes.y - PLAYER_EYE_HEIGHT, eyes.z), yaw, pitch)
-        // Anyone still seeing them lie dead sees them afresh, alive.
-        viewers().forEach { it.forgetPlayer(entityId) }
+        // Anyone still seeing them lie dead sees them get up, and go to where they respawned as players sync. Taking them
+        // away and showing them afresh instead, so soon after, loses their skin on some clients, which show them as Steve.
+        val look = look()
+        viewers().forEach { it.showAlive(entityId, look) }
         log.info("{} respawned", name)
     }
 
-    /** Takes the player [entityId] away from the client, if it shows them, to show them afresh as players sync. */
-    private fun forgetPlayer(entityId: Long) {
-        if (shownPlayers.remove(entityId) != null) send(RemoveActor(entityId))
+    /**
+     * Shows the client the player [entityId], whom it saw die, alive again,
+     * if it still shows them, as they [look] now. Their size goes with it:
+     * the client keeps the one it shrank them to as they fell, which leaves
+     * their hitbox and name down by their feet.
+     */
+    private fun showAlive(entityId: Long, look: Look) {
+        if (entityId !in shownPlayers) return
+        val size = listOf(flagsItem(shownFlags(look)), FloatItem(ActorDataId.WIDTH, PLAYER_WIDTH), FloatItem(ActorDataId.HEIGHT, heightOf(look)))
+        send(ActorEvent(entityId, ActorEvent.SPAWN_ALIVE, 0), SetActorData(entityId, size))
     }
 
     /** What the player holds, if anything. */

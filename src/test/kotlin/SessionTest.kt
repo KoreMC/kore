@@ -161,6 +161,7 @@ private const val GLASS_BOTTLE_ITEM = 428
 private const val MILK_ITEM = 393
 private const val CHORUS_ITEM = 597
 private const val CANDLE_ITEM = 662
+private const val SWORD_ITEM = 320
 
 /** The PlayerAction for breaking a block in creative. */
 private const val CREATIVE_DESTROY_BLOCK = 13
@@ -269,6 +270,7 @@ class SessionTest {
         food = Food(4, 0.3f, canAlwaysEat = true, action = FoodAction.CHORUS_TELEPORT, cooldown = ItemCooldown("chorusfruit", 20)),
     )
     private val candle = ItemDefinition("minecraft:candle", CANDLE_ITEM, componentBased = false, ItemVersion.NONE)
+    private val sword = ItemDefinition("minecraft:iron_sword", SWORD_ITEM, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 250)
 
     private val sent = mutableListOf<ByteArray>()
 
@@ -279,7 +281,7 @@ class SessionTest {
     private val mining = mapOf(stone.name to Mining(1.5, ToolKind.PICKAXE, harvestTier = 0))
     private val game = GameData(
         world, listOf(itemRegistry, biomes), blockDefinitions, creative, mining, Drops(creative.items.map { it.stack.item }, creative, palette),
-        ItemStacks(creative.items.map { it.stack.item } + pickaxe + hoe + poppyItem + waterBucket + bucket + disc + helmet + zombieHeadItem + apple + stew + bowl + potion + glassBottle + milk + chorusFruit + candle, creative, palette),
+        ItemStacks(creative.items.map { it.stack.item } + pickaxe + hoe + poppyItem + waterBucket + bucket + disc + helmet + zombieHeadItem + apple + stew + bowl + potion + glassBottle + milk + chorusFruit + candle + sword, creative, palette),
     )
     private val session: Session by lazy {
         // The only player, so the only one to see what they change.
@@ -669,6 +671,18 @@ class SessionTest {
         sent.clear()
         clientSends(playerAction(CREATIVE_DESTROY_BLOCK, BlockPos(1, -64, 0)))
         assertTrue(sent.isEmpty())
+    }
+
+    @Test
+    fun `in creative, a sword only hits, so a break with one is put back`() {
+        config = config.copy(gameMode = GameMode.CREATIVE)
+        spawn()
+        session.give(ItemStack(sword))
+        sent.clear()
+
+        clientSends(playerAction(CREATIVE_DESTROY_BLOCK, BlockPos(1, -64, 0)))
+        assertEquals(stone.networkId, world.blockAt(BlockPos(1, -64, 0)))
+        assertContentEquals(UpdateBlock(BlockPos(1, -64, 0), stone.networkId).encode(), receivedPacket())
     }
 
     @Test

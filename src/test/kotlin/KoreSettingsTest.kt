@@ -77,7 +77,11 @@ class KoreSettingsTest {
 
                     // Eating and drinking: food and cake filling the food bar, and what food, potions and milk give, like a golden apple's effects.
                     // Off, they're only items, and cake only a block.
-                    "food": true
+                    "food": true,
+
+                    // Players hitting each other: damage by weapon, enchantments and effects, critical hits, knockback and Fire Aspect.
+                    // Off, a hit does nothing. The pvp game rule turns it off too, for a while.
+                    "combat": true
                 },
 
                 // The most blocks a command changes at once: a number, true for the game's own limit, or false for none.

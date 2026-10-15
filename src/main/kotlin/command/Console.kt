@@ -338,6 +338,8 @@ private val ENGLISH = mapOf(
     "death.attack.magic" to "%1\$s was killed by magic",
     "death.attack.wither" to "%1\$s withered away",
     "death.attack.starve" to "%1\$s starved to death",
+    "death.attack.player" to "%1\$s was slain by %2\$s",
+    "death.attack.player.item" to "%1\$s was slain by %2\$s using %3\$s",
 )
 
 /** A parameter in a message, numbered or in turn, as a string or a number. */
@@ -365,10 +367,10 @@ fun english(message: String, parameters: List<String>): String {
     }.let { colours + it }
 }
 
-/** Shows what a command the console ran came to. */
+/** Shows what a command the console ran came to, in its colours, which the console draws and the log file leaves out. */
 fun logOutput(result: CommandResult) {
     for (message in result.messages) {
-        val text = english(message).replace(Regex("§."), "")
+        val text = english(message)
         if (message.success) log.info(text) else log.warn(text)
     }
 }

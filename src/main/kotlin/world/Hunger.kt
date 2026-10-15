@@ -12,13 +12,14 @@ private const val EXHAUSTION_PER_POINT = 4f
 private const val MAX_EXHAUSTION = 40f
 
 // How much what players do tires them, as the game has it: sprinting and swimming by the block, a jump, a sprinting jump,
-// breaking a block, a hurt, healing a point by themselves, and the Hunger effect a tick, at level I.
+// breaking a block, a hurt, a hit that lands, healing a point by themselves, and the Hunger effect a tick, at level I.
 const val SPRINT_EXHAUSTION = 0.1f
 const val SWIM_EXHAUSTION = 0.01f
 const val JUMP_EXHAUSTION = 0.05f
 const val SPRINT_JUMP_EXHAUSTION = 0.2f
 const val BREAK_EXHAUSTION = 0.005f
 const val HURT_EXHAUSTION = 0.1f
+const val ATTACK_EXHAUSTION = 0.1f
 const val REGENERATION_EXHAUSTION = 6f
 const val HUNGER_EFFECT_EXHAUSTION = 0.005f
 
