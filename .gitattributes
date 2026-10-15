@@ -1,0 +1,4 @@
+# Scripts keep the line endings their shells need, whatever checks them out.
+*.bat text eol=crlf
+*.sh text eol=lf
+gradlew text eol=lf

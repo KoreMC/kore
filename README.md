@@ -48,7 +48,11 @@ Kore is not a fork, a wrapper, or a port of an existing server. It's a ground-up
 
 ## 🚀 Getting Started
 
-**Requirements:** JDK 25. Gradle downloads a matching toolchain if you don't have one.
+**Requirements:** Java 25.
+
+Download the jar and the start script for your system from [Releases](https://github.com/KoreMC/kore/releases), put them in a folder of their own, and run the script. Each release says which client version it's for.
+
+To build it yourself instead, Gradle downloads a matching JDK if you don't have one:
 
 ```bash
 git clone --recurse-submodules https://github.com/KoreMC/kore.git
