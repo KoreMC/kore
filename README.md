@@ -70,9 +70,7 @@ Kore runs ICE-lite and takes the passive DTLS role, so it never initiates anythi
 **Requirements:** JDK 25. Gradle downloads a matching toolchain if you don't have one.
 
 ```bash
-git clone https://github.com/KoreMC/kore.git
-cd kore
-git clone https://github.com/KoreMC/data.git data
+git clone --recurse-submodules https://github.com/KoreMC/data.git
 ./gradlew run
 ```
 

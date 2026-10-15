@@ -75,9 +75,6 @@ permissions.json
 server.properties
 kore.json
 
-# The game data, checked out from https://github.com/KoreMC/data
-/data/
-
 # Each run's log, written by Kore (see logback.xml)
 /logs/
 
