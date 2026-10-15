@@ -264,6 +264,40 @@ class VanillaDataTest {
     }
 
     @Test
+    fun `what eating an item does comes from the game's food component`() {
+        assumeGameData()
+        val food = vanillaData.items.associate { it.name to it.food }
+
+        assertEquals(Food(4, 0.3f), food["minecraft:apple"])
+        assertEquals(Food(6, 0.6f, leaves = "minecraft:bowl"), food["minecraft:mushroom_stew"])
+        assertEquals(Food(1, 0.1f, ticks = 16), food["minecraft:dried_kelp"])
+        assertEquals(
+            Food(4, 1.2f, canAlwaysEat = true, effects = listOf(FoodEffect(10, 1, 5, 1f), FoodEffect(22, 0, 120, 1f))),
+            food["minecraft:golden_apple"],
+        )
+        assertEquals(listOf(FoodEffect(17, 0, 30, 0.8f)), food["minecraft:rotten_flesh"]?.effects)
+        // Honey cures poison, and leaves its bottle.
+        assertEquals(Food(6, 0.1f, canAlwaysEat = true, ticks = 40, leaves = "minecraft:glass_bottle", cures = listOf(19)), food["minecraft:honey_bottle"])
+        assertEquals(FoodAction.CHORUS_TELEPORT, food["minecraft:chorus_fruit"]?.action)
+        assertEquals(ItemCooldown("chorusfruit", 20), food["minecraft:chorus_fruit"]?.cooldown)
+        assertEquals(null, food["minecraft:apple"]?.cooldown)
+        assertEquals(FoodAction.SUSPICIOUS_STEW, food["minecraft:suspicious_stew"]?.action)
+        assertEquals(null, food["minecraft:stick"])
+    }
+
+    @Test
+    fun `potions, milk and ominous bottles drink, though the game's data has no food for them`() {
+        assumeGameData()
+        val food = vanillaData.items.associate { it.name to it.food }
+
+        assertEquals(Food(0, 0f, canAlwaysEat = true, leaves = "minecraft:glass_bottle", action = FoodAction.POTION), food["minecraft:potion"])
+        assertEquals(Food(0, 0f, canAlwaysEat = true, leaves = "minecraft:bucket", action = FoodAction.MILK), food["minecraft:milk_bucket"])
+        assertEquals(Food(0, 0f, canAlwaysEat = true, action = FoodAction.OMINOUS), food["minecraft:ominous_bottle"])
+        // Thrown, not drunk.
+        assertEquals(null, food["minecraft:splash_potion"])
+    }
+
+    @Test
     fun `a missing data directory names the file it needed`() {
         val missing = assertFailsWith<NoSuchFileException> { VanillaData.load(Path.of("no-such-data")) }
 

@@ -32,7 +32,50 @@ data class ItemDefinition(
     val enchantCategories: Set<String> = emptySet(),
     /** How well it takes to enchanting at a table: the higher, the more and better enchantments. 0 for an item a table can't enchant. */
     val enchantability: Int = components.enchantability() ?: 0,
+    /** What eating or drinking it does, or null for an item that's neither food nor a drink. */
+    val food: Food? = null,
 )
+
+/**
+ * What eating a food, or drinking a drink, does, as the game's item data
+ * has it: how much it fills the food bar, [nutrition], and how much
+ * saturation that brings, as a share of it; whether it can be eaten on a
+ * full bar; how many ticks eating it takes; what it leaves in hand, like a
+ * bowl; the effects it gives, each with a chance; the effects it cures;
+ * anything more it does, like chorus fruit's teleport; and how long before
+ * another of its kind can be eaten, if there's a wait.
+ */
+data class Food(
+    val nutrition: Int,
+    val saturationModifier: Float,
+    val canAlwaysEat: Boolean = false,
+    val ticks: Int = DEFAULT_EATING_TICKS,
+    val leaves: String? = null,
+    val effects: List<FoodEffect> = emptyList(),
+    val cures: List<Int> = emptyList(),
+    val action: FoodAction? = null,
+    val cooldown: ItemCooldown? = null,
+) {
+    /** Whether it fills the food bar at all: food does, and drinks like potions and milk don't. */
+    val feeds get() = nutrition > 0
+}
+
+/** An effect a food gives: by the game's number for it, [amplifier] levels above its first, for [seconds], with this [chance] of it. */
+data class FoodEffect(val effect: Int, val amplifier: Int, val seconds: Int, val chance: Float)
+
+/**
+ * What a food or drink does beyond feeding: chorus fruit teleports,
+ * suspicious stew gives the effect of the flower in it, a potion the
+ * effects of the potion it is, milk takes every effect away, and an
+ * ominous bottle gives Bad Omen at its level.
+ */
+enum class FoodAction { CHORUS_TELEPORT, SUSPICIOUS_STEW, POTION, MILK, OMINOUS }
+
+/** A wait of [ticks] before an item of the kind the game calls [category], like chorus fruit's `chorusfruit`, can be used again. */
+data class ItemCooldown(val category: String, val ticks: Int)
+
+/** How many ticks eating takes, for a food that doesn't say: 1.6 seconds. */
+const val DEFAULT_EATING_TICKS = 32
 
 /** The most of an item one slot holds, if its [components][ItemDefinition.components] say. */
 internal fun NbtMap.maxStackSize(): Int? =

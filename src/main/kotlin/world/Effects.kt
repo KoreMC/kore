@@ -3,6 +3,7 @@ package org.koremc.world
 /** The effects Kore gives, by the numbers the game gives them. */
 object Effect {
     const val SPEED = 1
+    const val SLOWNESS = 2
     const val HASTE = 3
     const val STRENGTH = 5
     const val JUMP_BOOST = 8
@@ -13,13 +14,22 @@ object Effect {
     const val FIRE_RESISTANCE = 12
     const val WATER_BREATHING = 13
     const val INVISIBILITY = 14
+    const val NIGHT_VISION = 16
+    const val HUNGER = 17
+    const val WEAKNESS = 18
     const val POISON = 19
     const val WITHER = 20
     const val HEALTH_BOOST = 21
     const val ABSORPTION = 22
+    const val SATURATION = 23
     const val FATAL_POISON = 25
     const val SLOW_FALLING = 26
     const val CONDUIT_POWER = 27
+    const val BAD_OMEN = 28
+    const val WIND_CHARGED = 33
+    const val WEAVING = 34
+    const val OOZING = 35
+    const val INFESTED = 36
 }
 
 /** An effect at a strength: its amplifier, which is 0 for level I. */

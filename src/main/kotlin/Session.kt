@@ -112,6 +112,7 @@ import org.koremc.protocol.PlayerAuthInput
 import org.koremc.protocol.PlayerEnchantOptions
 import org.koremc.protocol.PlayerList
 import org.koremc.protocol.PlayerListEntry
+import org.koremc.protocol.PlayerStartItemCooldown
 import org.koremc.protocol.RecordStarted
 import org.koremc.protocol.RemoveActor
 import org.koremc.protocol.RequestChunkRadius
@@ -162,6 +163,8 @@ import org.koremc.registry.BlockState
 import org.koremc.registry.EFFICIENCY
 import org.koremc.registry.FIRE_PROTECTION
 import org.koremc.registry.FROST_WALKER
+import org.koremc.registry.Food
+import org.koremc.registry.FoodAction
 import org.koremc.registry.ItemStack
 import org.koremc.registry.ItemStacks
 import org.koremc.registry.MENDING
@@ -171,12 +174,14 @@ import org.koremc.registry.damage
 import org.koremc.registry.levelOf
 import org.koremc.registry.mendedBy
 import org.koremc.registry.sameKindAs
+import org.koremc.registry.suspiciousStewEffect
 import org.koremc.registry.worn
 import org.koremc.world.BARREL
 import org.koremc.world.BARREL_OPEN
 import org.koremc.world.BEACON_INTERVAL
 import org.koremc.world.BONE_MEAL
 import org.koremc.world.BOOK_PUT
+import org.koremc.world.BREAK_EXHAUSTION
 import org.koremc.world.BREWING_BOTTLES
 import org.koremc.world.BREWING_FUEL
 import org.koremc.world.BREWING_REAGENT
@@ -186,6 +191,8 @@ import org.koremc.world.BlockPos
 import org.koremc.world.BlockSound
 import org.koremc.world.BrewingStand
 import org.koremc.world.BrokenBlock
+import org.koremc.world.CAKE_NUTRITION
+import org.koremc.world.CAKE_SATURATION
 import org.koremc.world.CRAFTER_SLOTS
 import org.koremc.world.Cartographed
 import org.koremc.world.Changes
@@ -214,19 +221,27 @@ import org.koremc.world.Furnace
 import org.koremc.world.GROWTH
 import org.koremc.world.HOPPER
 import org.koremc.world.HOPPER_SLOTS
+import org.koremc.world.HUNGER_EFFECT_EXHAUSTION
+import org.koremc.world.HURT_EXHAUSTION
 import org.koremc.world.HeldAfter
 import org.koremc.world.Hopper
+import org.koremc.world.Hunger
 import org.koremc.world.INFINITE_EFFECT
 import org.koremc.world.ItemEntity
 import org.koremc.world.ItemUsedOn
+import org.koremc.world.JUMP_EXHAUSTION
 import org.koremc.world.LOCATOR
 import org.koremc.world.Liquid
 import org.koremc.world.MAX_BERRY_GROWTH
+import org.koremc.world.MAX_FOOD
 import org.koremc.world.MAX_HEALTH
+import org.koremc.world.MAX_OMINOUS_AMPLIFIER
+import org.koremc.world.MAX_Y
 import org.koremc.world.MIN_Y
 import org.koremc.world.Machine
 import org.koremc.world.MapData
 import org.koremc.world.NOTE_SOUND
+import org.koremc.world.OMINOUS_TICKS
 import org.koremc.world.PISTON_MOVE_TICKS
 import org.koremc.world.PLAYER_EYE_HEIGHT
 import org.koremc.world.PLAYER_HEIGHT
@@ -238,21 +253,28 @@ import org.koremc.world.PLAYER_WALK_SPEED
 import org.koremc.world.PLAYER_WIDTH
 import org.koremc.world.Placer
 import org.koremc.world.PlayerExperience
+import org.koremc.world.REGENERATION_EXHAUSTION
 import org.koremc.world.SNOW_LAYER
+import org.koremc.world.SPRINT_EXHAUSTION
+import org.koremc.world.SPRINT_JUMP_EXHAUSTION
+import org.koremc.world.STARTING_SATURATION
 import org.koremc.world.STORAGE_SLOTS
 import org.koremc.world.SUB_CHUNK_COUNT
 import org.koremc.world.SWEET_BERRY_BUSH
+import org.koremc.world.SWIM_EXHAUSTION
 import org.koremc.world.SongChange
 import org.koremc.world.Storage
 import org.koremc.world.Surroundings
 import org.koremc.world.Vec3
 import org.koremc.world.Vitals
+import org.koremc.world.WELL_FED
 import org.koremc.world.WRITABLE_BOOK
 import org.koremc.world.WRITTEN_BOOK
 import org.koremc.world.armourOf
 import org.koremc.world.armourWear
 import org.koremc.world.beaconLevel
 import org.koremc.world.bit
+import org.koremc.world.biteCake
 import org.koremc.world.blockPlacedBy
 import org.koremc.world.breakBlock
 import org.koremc.world.breakTicks
@@ -276,11 +298,15 @@ import org.koremc.world.fillPortalFrame
 import org.koremc.world.furnaceKind
 import org.koremc.world.goesOnLectern
 import org.koremc.world.harvests
+import org.koremc.world.hasCandle
 import org.koremc.world.hasGlowBerries
 import org.koremc.world.heightMap
 import org.koremc.world.ignite
 import org.koremc.world.isBlockedOpen
+import org.koremc.world.isCake
+import org.koremc.world.isCandle
 import org.koremc.world.isCauldron
+import org.koremc.world.isClear
 import org.koremc.world.isComposter
 import org.koremc.world.isCrafter
 import org.koremc.world.isFlowerPot
@@ -307,8 +333,11 @@ import org.koremc.world.pickedItem
 import org.koremc.world.pistonMotions
 import org.koremc.world.place
 import org.koremc.world.playNote
+import org.koremc.world.potionEffects
 import org.koremc.world.pressPlates
+import org.koremc.world.putCandleOn
 import org.koremc.world.putOnLectern
+import org.koremc.world.putOutCandle
 import org.koremc.world.putOutFire
 import org.koremc.world.rainingAt
 import org.koremc.world.restoreBlockData
@@ -320,6 +349,7 @@ import org.koremc.world.side
 import org.koremc.world.signWaxed
 import org.koremc.world.smokeDirection
 import org.koremc.world.snapsUp
+import org.koremc.world.solidHeights
 import org.koremc.world.songTitleIn
 import org.koremc.world.stepOn
 import org.koremc.world.storage
@@ -357,6 +387,7 @@ import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlin.random.Random
 
 private val log = LoggerFactory.getLogger(Session::class.java)
@@ -430,6 +461,9 @@ private const val ELYTRA = "minecraft:elytra"
 
 /** The armour slot the item called [name] is worn in, or null for something that isn't worn. */
 private fun armourSlotFor(name: String): Int? = if (name == ELYTRA) 1 else ARMOUR_PIECES.indexOfFirst(name::endsWith).takeIf { it >= 0 }
+
+/** A player eating: the item, from the hotbar [slot] they hold, and the client's tick they started on. */
+private class Eating(val slot: Int, val item: String, val since: Long)
 
 /** Buckets: empty, and full of each liquid. */
 private const val BUCKET = "minecraft:bucket"
@@ -513,7 +547,7 @@ private const val LEVEL_UP = "levelup"
 /** The sound of a brewing stand finishing a brew. */
 private const val BREWED = "potion.brewed"
 
-/** The sound of an item burning in lava. */
+/** The sound of an item burning in lava, and of the fire on a player going out in water or rain. */
 private const val FIZZ = "fizz"
 
 /** The sound of a beacon taking the powers a player paid for. */
@@ -553,8 +587,17 @@ private const val LEFT = "\u00a7e%multiplayer.player.left"
 /** The message for a player who died, as `/kill` kills them. */
 private const val DIED = "death.attack.generic"
 
-/** The game's name for a player's health, as an attribute. */
+/** The game's names for a player's health and hunger, as attributes. */
 private const val HEALTH = "minecraft:health"
+private const val FOOD = "minecraft:player.hunger"
+private const val SATURATION = "minecraft:player.saturation"
+private const val EXHAUSTION = "minecraft:player.exhaustion"
+
+/** The most exhaustion the client shows, at which a point of saturation or food goes. */
+private const val SHOWN_MAX_EXHAUSTION = 5f
+
+/** The furthest a player moves in a tick that tires them: anything further is a teleport. */
+private const val MAX_TIRING_STEP = 4f
 
 /** How long a player lies dead before others stop seeing them, in ticks: long enough to fall over. */
 private const val DEAD_BODY_TICKS = 22
@@ -592,6 +635,28 @@ private const val BREATH_REGAINED = 4
 /** How often, in ticks, a player heals by themselves while well fed, and in peace. */
 private const val REGENERATION_INTERVAL = 80
 private const val PEACEFUL_REGENERATION_INTERVAL = 20
+
+/** How often, in ticks, a player's food bar fills again by a point, in peace. */
+private const val PEACEFUL_FEEDING_INTERVAL = 10
+
+/** How far starving takes a player's health down at each difficulty but hard, where it kills them. */
+private val STARVES_DOWN_TO = mapOf(Difficulty.PEACEFUL to MAX_HEALTH, Difficulty.EASY to 10f, Difficulty.NORMAL to 1f)
+
+/** How far up the item's network ID goes in the data of the event of a player eating it. */
+private const val EATING_ITEM_SHIFT = 16
+
+/** How many ticks short of the time a food takes to eat the client may finish, as its ticks and the server's drift apart. */
+private const val EATING_SLACK = 2
+
+private const val TICKS_PER_SECOND = 20
+
+/** The sounds of a player finishing what they eat, and of chorus fruit teleporting them. */
+private const val BURP = "burp"
+private const val TELEPORT_SOUND = "teleport"
+
+/** How far chorus fruit teleports a player at most, each way, and how many places it tries. */
+private const val CHORUS_RANGE = 8
+private const val CHORUS_TRIES = 16
 
 /** How often, in ticks, Regeneration heals, poison hurts and wither hurts at level I, twice as often a level up. */
 private const val REGENERATION_EVERY = 50
@@ -865,6 +930,18 @@ class Session(
     /** The player's health, breath and fire. */
     val vitals = Vitals()
 
+    /** The player's food bar, saturation and exhaustion. */
+    val hunger = Hunger()
+
+    /** What the player's eating, while they eat. */
+    private var eating: Eating? = null
+
+    /** When the player can next use an item of each kind with a wait between uses, by the game's name for the kind, in [aliveTicks]. */
+    private val cooldowns = HashMap<String, Int>()
+
+    /** The food and saturation the client last heard the player has. */
+    private var shownHunger = MAX_FOOD to STARTING_SATURATION
+
     /** Ticks since the player last healed by themselves, and since they joined, for effects that last for ever to count by. */
     private var sinceRegeneration = 0
     private var aliveTicks = 0
@@ -1014,6 +1091,7 @@ class Session(
                 is InventoryTransaction -> onTransaction(packet)
                 is PlayerAction -> if (packet.action == PlayerAction.CREATIVE_DESTROY_BLOCK) onBreak(packet.position, creativeOnly = true)
                 is MobEquipment -> onEquip(packet)
+                is ActorEvent -> if (packet.event == ActorEvent.EATING_ITEM) onEating()
                 is Animate -> if (packet.action == Animate.SWING_ARM) viewers().forEach { it.showSwing(entityId, packet.swingSource) }
                 is LevelSoundEvent -> onSound(packet)
                 is LecternUpdate -> onLecternUpdate(packet)
@@ -1180,6 +1258,7 @@ class Session(
             teleportedTo = null
         }
         val fellFrom = feet.y
+        val from = position
         position = reported
         delta = packet.delta
         if (pistonWatch > 0) {
@@ -1192,6 +1271,7 @@ class Session(
         onGround = InputFlag.VERTICAL_COLLISION in packet.inputs
         onInputs(packet)
         fall(fellFrom)
+        tire(from)
 
         val chunk = reported.toBlockPos().chunk
         val radius = chunkRadius ?: return
@@ -1219,6 +1299,27 @@ class Session(
                 fallDistance = 0f
             }
             feet.y < fromY -> fallDistance += fromY - feet.y
+        }
+    }
+
+    /**
+     * Tires the player for moving from [from], where their eyes were, to
+     * where they are: swimming, or under water, by every block they went,
+     * wading by every block across, and sprinting on the ground by every
+     * block across, as the game counts it. A move too far to have been a
+     * step, like a teleport, doesn't tire them.
+     */
+    private fun tire(from: Vec3) {
+        val dx = position.x - from.x
+        val dy = position.y - from.y
+        val dz = position.z - from.z
+        val across = sqrt(dx * dx + dz * dz)
+        val moved = sqrt(dx * dx + dy * dy + dz * dz)
+        if (moved == 0f || moved > MAX_TIRING_STEP) return
+        when {
+            swimming || world.isWet(eyes().toBlockPos()) -> exhaust(SWIM_EXHAUSTION * moved)
+            world.isWet(feet.toBlockPos()) -> exhaust(SWIM_EXHAUSTION * across)
+            sprinting && onGround -> exhaust(SPRINT_EXHAUSTION * across)
         }
     }
 
@@ -1265,6 +1366,7 @@ class Session(
         if (InputFlag.STOP_SWIMMING in inputs) swimming = false
         if (InputFlag.START_GLIDING in inputs) gliding = true
         if (InputFlag.STOP_GLIDING in inputs) gliding = false
+        if (InputFlag.START_JUMPING in inputs) exhaust(if (sprinting) SPRINT_JUMP_EXHAUSTION else JUMP_EXHAUSTION)
         if (InputFlag.START_SPRINTING in inputs) {
             sprinting = true
             sneaking = false
@@ -1295,12 +1397,13 @@ class Session(
     /**
      * The player's own flags: those every player has, but for breathing,
      * which they stop doing under water, and whether they sprint, sneak,
-     * swim, glide or burn.
+     * swim, glide, burn or eat.
      */
     private fun playerFlags(): Set<ActorFlag> = PLAYER_FLAGS - ActorFlag.BREATHING +
         listOfNotNull(
             ActorFlag.BREATHING.takeIf { breathing }, ActorFlag.SPRINTING.takeIf { sprinting }, ActorFlag.SNEAKING.takeIf { sneaking },
             ActorFlag.ON_FIRE.takeIf { vitals.fireTicks > 0 }, ActorFlag.SWIMMING.takeIf { swimming }, ActorFlag.GLIDING.takeIf { gliding },
+            ActorFlag.USING_ITEM.takeIf { eating != null },
         )
 
     /** Whether the player breathes, rather than holding their breath underwater. */
@@ -1739,7 +1842,10 @@ class Session(
 
     /** Follows the hotbar slot the player holds. The offhand reports its item this way too, and changes nothing. */
     private fun onEquip(packet: MobEquipment) {
-        if (packet.windowId == INVENTORY_WINDOW && packet.selectedSlot in 0 until HOTBAR_SIZE) heldSlot = packet.selectedSlot
+        if (packet.windowId != INVENTORY_WINDOW || packet.selectedSlot !in 0 until HOTBAR_SIZE) return
+        // Holding something else stops them eating what they held.
+        if (packet.selectedSlot != heldSlot) eating = null
+        heldSlot = packet.selectedSlot
     }
 
     /**
@@ -1802,6 +1908,7 @@ class Session(
         val held = inventory.items[heldSlot]
         when (packet.type) {
             InventoryTransaction.USE_ITEM -> packet.use?.let { onItemUse(it, tick, packet.legacyRequestId) }
+            InventoryTransaction.RELEASE_ITEM -> eating = null
             InventoryTransaction.NORMAL -> onDropFromSlot(packet.actions)
         }
         val acknowledged = if (packet.legacyRequestId != 0) acknowledge(packet) else emptyList()
@@ -1866,7 +1973,7 @@ class Session(
         when (use.action) {
             ItemUseAction.PLACE -> onClick(use)
             ItemUseAction.DESTROY -> onBreak(use.position, creativeOnly = false, tick)
-            ItemUseAction.USE -> useInAir(use, legacyRequestId)
+            ItemUseAction.USE -> useInAir(use, tick, legacyRequestId)
             // Attacking with an item is for later.
             ItemUseAction.USE_AS_ATTACK -> {}
         }
@@ -1879,13 +1986,15 @@ class Session(
      * the square of the world they're in, which they draw as they hold it,
      * and an empty locator map a locator map, in creative too. With more than
      * one empty map, the map goes among their items, or drops at their feet
-     * if there's no room.
+     * if there's no room. Food is eaten, as [eatFrom] has it, by the client's
+     * [tick].
      */
-    private fun useInAir(use: ItemUse, legacyRequestId: Int) {
+    private fun useInAir(use: ItemUse, tick: Long?, legacyRequestId: Int) {
         if (use.hotbarSlot in 0 until HOTBAR_SIZE) heldSlot = use.hotbarSlot
         val held = inventory.items[heldSlot]?.takeIf { use.hotbarSlot == heldSlot && it.stack.item.runtimeId == use.heldItem } ?: return
         if (gameMode == GameMode.SPECTATOR) return
         armourSlotFor(held.stack.item.name)?.let { return putOn(it, held, legacyRequestId) }
+        held.stack.item.food?.let { return eatFrom(held, it, tick ?: aliveTicks.toLong()) }
         if (held.stack.item.name != EMPTY_MAP) return
         val blank = game.items.of(FILLED_MAP) ?: return
         val map = world.maps.start(floor(position.x).toInt(), floor(position.z).toInt(), showsPlayers = held.stack.aux == LOCATOR)
@@ -1893,6 +2002,129 @@ class Session(
         world.drawMap(map, position.x, position.z, game.traits)
         swapHeld(drawn)
         log.debug("{} started map {}, around {}, {}", player?.displayName, map.id, map.centreX, map.centreZ)
+    }
+
+    /**
+     * The player eating or drinking [food], [held], as the client says, by
+     * its [tick]: the first use starts them eating, unless their food bar's
+     * full and it isn't a food they can always eat, though in creative and
+     * in peace any food can be eaten whenever, or they're still waiting to
+     * eat another of its kind. Once it's taken as long as the food takes,
+     * the next use finishes it, and starts on the next of it while they
+     * hold the button down. Nothing's eaten with food switched off.
+     */
+    private fun eatFrom(held: SlotStack, food: Food, tick: Long) {
+        if (!world.features.food) return
+        val meal = eating
+        if (meal == null || meal.slot != heldSlot || meal.item != held.stack.item.name) {
+            if (eatsOnlyHungry() && hunger.full && !food.canAlwaysEat) return
+            if (food.cooldown?.let { (cooldowns[it.category] ?: 0) > aliveTicks } == true) return
+            eating = Eating(heldSlot, held.stack.item.name, tick)
+            return
+        }
+        if (tick - meal.since < food.ticks - EATING_SLACK) return
+        eating = null
+        eat(held, food)
+        // Holding the button down, the client goes straight on to the next of them, if there is one, and
+        // the use that finishes that is the next it sends. Its wait between chorus fruit doesn't stop it.
+        if (!dead && inventory.items[heldSlot]?.stack?.item?.name == meal.item) eating = Eating(heldSlot, meal.item, tick)
+    }
+
+    /**
+     * The player finishing [food], [held]: it fills their food bar, gives
+     * its effects, each by its chance, cures what it cures, and does what
+     * more it does, like a potion's effects, then it's gone from their
+     * hand, but in creative, leaving what it leaves, like a bowl or a glass
+     * bottle. Their wait for another of its kind starts. Food makes them
+     * burp, for everyone around to hear, and a drink doesn't.
+     */
+    private fun eat(held: SlotStack, food: Food) {
+        if (food.feeds) hunger.eat(food.nutrition, food.saturationModifier)
+        for (effect in food.effects) {
+            if (Random.nextFloat() < effect.chance) giveEffect(EffectLevel(effect.effect, effect.amplifier), effect.seconds * TICKS_PER_SECOND, ambient = false)
+        }
+        food.cures.forEach { takeEffects(it) }
+        val aux = held.stack.aux
+        when (food.action) {
+            FoodAction.CHORUS_TELEPORT -> chorusTeleport()
+            FoodAction.SUSPICIOUS_STEW -> suspiciousStewEffect(aux)?.let { (effect, ticks) -> giveEffect(EffectLevel(effect), ticks, ambient = false) }
+            FoodAction.POTION -> potionEffects(aux).forEach { giveEffect(it.level, it.ticks, ambient = false) }
+            FoodAction.MILK -> takeEffects()
+            FoodAction.OMINOUS -> giveEffect(EffectLevel(Effect.BAD_OMEN, aux.coerceIn(0, MAX_OMINOUS_AMPLIFIER)), OMINOUS_TICKS, ambient = false)
+            null -> {}
+        }
+        food.cooldown?.let {
+            cooldowns[it.category] = aliveTicks + it.ticks
+            send(PlayerStartItemCooldown(it.category, it.ticks))
+        }
+        if (!creative) {
+            val leaves = food.leaves?.let { game.items.of(it) }
+            if (leaves != null) swapHeld(leaves) else inventory.remove(heldSlot)
+        }
+        if (food.feeds) showAround(position.toBlockPos(), LevelSoundEvent(BURP, position, -1))
+        sendHunger()
+        log.debug("{} ate {}, and has {} food and {} saturation", name, held.stack.item.name, hunger.food, hunger.saturation)
+    }
+
+    /** Whether the player only eats while they're hungry: in survival or adventure, but not in peace. */
+    private fun eatsOnlyHungry() = (gameMode == GameMode.SURVIVAL || gameMode == GameMode.ADVENTURE) && world.difficulty != Difficulty.PEACEFUL
+
+    /**
+     * The player clicking the cake [cake]: a candle in hand goes on top of
+     * it while it's whole, if they can build, a lit candle on it goes out,
+     * and otherwise they eat a slice of it. Flint and steel or a fire charge
+     * lights a candle on it instead, as [useItemOn] has it. Everyone with
+     * the chunk sees and hears it. Returns whether anything happened.
+     */
+    private fun useCake(use: ItemUse, cake: BlockState): Boolean {
+        if (use.hotbarSlot !in 0 until HOTBAR_SIZE || !inReach(use.position)) return false
+        heldSlot = use.hotbarSlot
+        val held = inventory.items[heldSlot]?.stack?.item?.name.takeIf { use.heldItem != 0 }
+        if (cake.hasCandle && (held == FLINT_AND_STEEL || held == FIRE_CHARGE)) return false
+        val candle = held?.takeIf { isCandle(it) && canBuild() }
+        val used = candle?.let { world.putCandleOn(use.position, cake, it) } ?: world.putOutCandle(use.position, cake) ?: return eatCake(use, cake)
+        showUsed(used, use.position)
+        log.debug("{} used {} on {} at {}", player?.displayName, held ?: "their hand", cake.name, use.position)
+        return true
+    }
+
+    /**
+     * The player eating a slice of the cake they clicked, [cake], unless
+     * food's switched off, or they're full and only eat while hungry. A
+     * slice feeds them, a candle on it drops, and they burp, for everyone
+     * around to hear. Returns whether they ate.
+     */
+    private fun eatCake(use: ItemUse, cake: BlockState): Boolean {
+        if (!world.features.food || (eatsOnlyHungry() && hunger.full)) return false
+        val used = world.biteCake(use.position, cake, game.items) ?: return false
+        showUsed(used, use.position)
+        hunger.eat(CAKE_NUTRITION, CAKE_SATURATION)
+        sendHunger()
+        showAround(position.toBlockPos(), LevelSoundEvent(BURP, position, -1))
+        log.debug("{} ate cake at {}, and has {} food and {} saturation", name, use.position, hunger.food, hunger.saturation)
+        return true
+    }
+
+    /**
+     * Teleports the player somewhere near at random, as chorus fruit does:
+     * up to eight blocks away each way, down onto whatever's under them
+     * there, where they fit, trying sixteen times before giving up. Everyone
+     * around both places hears it.
+     */
+    private fun chorusTeleport() {
+        repeat(CHORUS_TRIES) {
+            val x = feet.x + Random.nextFloat() * 2 * CHORUS_RANGE - CHORUS_RANGE
+            val z = feet.z + Random.nextFloat() * 2 * CHORUS_RANGE - CHORUS_RANGE
+            var below = BlockPos(floor(x).toInt(), (floor(feet.y).toInt() + Random.nextInt(-CHORUS_RANGE, CHORUS_RANGE + 1)).coerceIn(MIN_Y + 1, MAX_Y) - 1, floor(z).toInt())
+            while (below.y > MIN_Y && world.stateAt(below)?.solidHeights() == null) below = below.side(Face.DOWN)
+            if (world.stateAt(below)?.solidHeights() == null) return@repeat
+            val to = Vec3(x, below.y + 1f, z)
+            if (!world.isClear(to, PLAYER_WIDTH, PLAYER_HEIGHT) || world.isWet(to.toBlockPos())) return@repeat
+            showAround(position.toBlockPos(), LevelSoundEvent(TELEPORT_SOUND, position, -1))
+            teleport(to, yaw, pitch)
+            showAround(position.toBlockPos(), LevelSoundEvent(TELEPORT_SOUND, position, -1))
+            return
+        }
     }
 
     /**
@@ -1947,12 +2179,15 @@ class Session(
     }
 
     /**
-     * Gives the player [given] for [ticks], as a beacon does, unless they
-     * have as much of it already. They see it start, or change. The client
-     * moves its player by its effects itself: Speed quickens their walk,
-     * sprinting or not, which the walking speed Kore gives them would undo.
+     * Gives the player [given] for [ticks], as a beacon or a potion does,
+     * unless they have as much of it already. They see it start, or change.
+     * Instant Health and Instant Damage heal or hurt them at once instead.
+     * The client moves its player by its effects itself: Speed quickens
+     * their walk, sprinting or not, which the walking speed Kore gives them
+     * would undo.
      */
     internal fun giveEffect(given: EffectLevel, ticks: Int, ambient: Boolean) {
+        if (tookInstantly(given)) return
         val had = effects[given.effect] != null
         val visible = effects.visible()
         if (!effects.give(given, ticks, ambient)) return
@@ -1968,19 +2203,23 @@ class Session(
      * Health and Instant Damage heal or hurt them at once, and are gone.
      */
     fun setEffect(given: EffectLevel, ticks: Int, particles: Boolean) {
-        // Doubling a level at a time, as far as a number goes.
-        val strength = 1 shl minOf(given.amplifier, MAX_DOUBLINGS)
-        when (given.effect) {
-            Effect.INSTANT_HEALTH -> return heal(INSTANT_HEALTH * strength)
-            Effect.INSTANT_DAMAGE -> {
-                hurt(INSTANT_DAMAGE * strength, DamageCause.MAGIC)
-                return
-            }
-        }
+        if (tookInstantly(given)) return
         val had = effects[given.effect] != null
         effects.set(given, ticks, particles)
         send(MobEffect(entityId, if (had) MobEffect.MODIFY else MobEffect.ADD, given.effect, given.amplifier, ticks, particles = particles), visibleEffects())
         effectStarted(given)
+    }
+
+    /** Heals or hurts the player at once, for Instant Health or Instant Damage, [given]. Returns whether it was one of them. */
+    private fun tookInstantly(given: EffectLevel): Boolean {
+        // Doubling a level at a time, as far as a number goes.
+        val strength = 1 shl minOf(given.amplifier, MAX_DOUBLINGS)
+        when (given.effect) {
+            Effect.INSTANT_HEALTH -> heal(INSTANT_HEALTH * strength)
+            Effect.INSTANT_DAMAGE -> hurt(INSTANT_DAMAGE * strength, DamageCause.MAGIC)
+            else -> return false
+        }
+        return true
     }
 
     /** Takes [effect] from the player, or every effect, for null. Returns whether they had any to take. */
@@ -2062,6 +2301,7 @@ class Session(
             blockFirst && (clicked?.furnaceKind != null || clicked?.name == BREWING_STAND || clicked?.name == HOPPER || clicked?.dispenserKind != null || clicked?.isCrafter == true) ->
                 openMachine(use.position)
             blockFirst && clicked?.isSign == true -> useSign(use, clicked)
+            blockFirst && clicked?.isCake == true && useCake(use, clicked) -> {}
             clicked != null && useItemOn(use, clicked, blockFirst) -> {}
             blockFirst && clicked?.opensOnClick == true && !headOnNoteBlock(use, clicked) ->
                 log.debug("{} clicked {} at {}, which Kore can't open yet", player?.displayName, clicked.name, use.position)
@@ -2470,7 +2710,9 @@ class Session(
         }
         viewers().forEach { it.containerBroke(changes.broken.keys) }
         log.debug("{} broke {} at {}", player?.displayName, state.name, pos)
-        if (!creative) wearHeld(game.mining[state.name]?.let { wearFromBreaking(it, held) } ?: 0)
+        if (creative) return
+        wearHeld(game.mining[state.name]?.let { wearFromBreaking(it, held) } ?: 0)
+        exhaust(BREAK_EXHAUSTION)
     }
 
     /**
@@ -2756,15 +2998,16 @@ class Session(
         val armour: List<ItemStack?>,
         /** The effects whose particles show around them. */
         val effects: Long,
-        /** Whether Invisibility hides them, and whether they burn. */
+        /** Whether Invisibility hides them, whether they burn, and whether they eat. */
         val invisible: Boolean,
         val onFire: Boolean,
+        val eating: Boolean,
     )
 
     private fun look() = Look(
         position, pitch, yaw, headYaw, onGround, sneaking, sprinting, swimming, gliding, heldSlot, inventory.items[heldSlot]?.stack,
         inventory.offhand[0]?.stack, inventory.armour.contents().map { it?.stack }, effects.visible(), effects[Effect.INVISIBILITY] != null,
-        vitals.fireTicks > 0,
+        vitals.fireTicks > 0, eating != null,
     )
 
     /**
@@ -2809,7 +3052,7 @@ class Session(
                 packets += MovePlayer(other.entityId, now.position, now.pitch, now.yaw, now.headYaw, now.onGround)
             }
             if (now.sneaking != before.sneaking || now.sprinting != before.sprinting || now.swimming != before.swimming || now.gliding != before.gliding ||
-                now.invisible != before.invisible || now.onFire != before.onFire
+                now.invisible != before.invisible || now.onFire != before.onFire || now.eating != before.eating
             ) {
                 packets += SetActorData(other.entityId, listOf(flagsItem(shownFlags(now)), FloatItem(ActorDataId.HEIGHT, heightOf(now))))
             }
@@ -2850,10 +3093,10 @@ class Session(
         )
     }
 
-    /** The flags others see a player with as they [look]: their own, that their name shows above them, whether they can't be seen, and whether they burn. */
+    /** The flags others see a player with as they [look]: their own, that their name shows above them, whether they can't be seen, whether they burn, and whether they eat. */
     private fun shownFlags(look: Look) = PLAYER_FLAGS + ActorFlag.SHOW_NAME + ActorFlag.ALWAYS_SHOW_NAME +
         listOfNotNull(ActorFlag.SPRINTING.takeIf { look.sprinting }, ActorFlag.SNEAKING.takeIf { look.sneaking }, ActorFlag.INVISIBLE.takeIf { look.invisible }, ActorFlag.ON_FIRE.takeIf { look.onFire },
-            ActorFlag.SWIMMING.takeIf { look.swimming }, ActorFlag.GLIDING.takeIf { look.gliding },
+            ActorFlag.SWIMMING.takeIf { look.swimming }, ActorFlag.GLIDING.takeIf { look.gliding }, ActorFlag.USING_ITEM.takeIf { look.eating },
         )
 
     private fun heightOf(look: Look) = when {
@@ -3153,9 +3396,12 @@ class Session(
         if (!isInGame || dead || !hurtable) return false
         val damage = damageAfter(amount, cause, inventory.armour.contents().map { it?.stack }, effects.level(Effect.RESISTANCE))
         vitals.hurt(damage) ?: return false
-        if (cause.armour) wearArmour(armourWear(amount))
+        if (cause.armour) {
+            wearArmour(armourWear(amount))
+            exhaust(HURT_EXHAUSTION)
+        }
         sendHealth()
-        viewers().filter { it.isInGame }.forEach { it.showHurt(entityId) }
+        viewers().filter { it.isInGame }.forEach { it.showHurt(entityId, cause) }
         log.debug("{} was hurt by {} of {}, down to {}", name, damage, cause.name.lowercase(), vitals.health)
         if (vitals.isDead) die(cause.message)
         return true
@@ -3166,9 +3412,13 @@ class Session(
         if (!dead && vitals.heal(amount)) sendHealth()
     }
 
-    /** Shows the client the player [entityId] flinching, if it's its own player or one it can see. */
-    private fun showHurt(entityId: Long) {
-        if (entityId == this.entityId || entityId in shownPlayers) send(ActorEvent(entityId, ActorEvent.HURT, 0))
+    /**
+     * Shows the client the player [entityId] flinching from [cause], if
+     * it's its own player or one it can see. The client sounds the hurt by
+     * its cause: the sound of burning, say, rather than the usual one.
+     */
+    private fun showHurt(entityId: Long, cause: DamageCause) {
+        if (entityId == this.entityId || entityId in shownPlayers) send(ActorEvent(entityId, ActorEvent.HURT, cause.id))
     }
 
     /** Wears each piece of armour the player has on by [uses], as a blow does. One that wears out breaks, which everyone around hears. */
@@ -3230,9 +3480,53 @@ class Session(
             breathe(underwater = false)
         }
         if (dead) return
+        tickHunger()
         if (playerFlags() != flags || vitals.air != air) {
             send(SetActorData(entityId, listOf(flagsItem(playerFlags()), ShortItem(ActorDataId.AIR_SUPPLY, maxOf(vitals.air, 0).toShort()))))
         }
+        if (hunger.food to hunger.saturation != shownHunger) sendHunger()
+    }
+
+    /**
+     * What the player's hunger does this tick: in peace, their food bar
+     * fills again a point every half second, the Hunger effect tires them,
+     * and Saturation feeds them. With hunger switched off, the bar stays
+     * full.
+     */
+    private fun tickHunger() {
+        if (!world.features.hunger) {
+            hunger.reset()
+        } else {
+            if (world.difficulty == Difficulty.PEACEFUL && aliveTicks % PEACEFUL_FEEDING_INTERVAL == 0 && !hunger.full) hunger.food++
+            effects[Effect.HUNGER]?.let { exhaust(HUNGER_EFFECT_EXHAUSTION * (it.amplifier + 1)) }
+        }
+        effects[Effect.SATURATION]?.let { if (world.features.food) hunger.eat(it.amplifier + 1, 1f) }
+    }
+
+    /**
+     * The client saying its player is eating or drinking, as it does every
+     * few ticks while it does: the sound of it, and the bits of food from
+     * their mouth, for them and everyone who sees them, by what they hold.
+     * The client shows its own player eating only as the server says, so
+     * it's heard in step with what the client shows, whatever Kore makes of
+     * the eating itself.
+     */
+    private fun onEating() {
+        if (!world.features.food || dead) return
+        val held = inventory.items[heldSlot]?.stack?.takeIf { it.item.food != null } ?: return
+        val event = ActorEvent(entityId, ActorEvent.EATING_ITEM, (held.item.runtimeId shl EATING_ITEM_SHIFT) or held.aux)
+        viewers().filter { it.isInGame }.forEach { it.showEating(entityId, event) }
+    }
+
+    /** Shows the client the player [entityId] eating, [event], if it's its own player or one it can see. */
+    private fun showEating(entityId: Long, event: ActorEvent) {
+        if (entityId == this.entityId || entityId in shownPlayers) send(event)
+    }
+
+    /** Tires the player by [amount], unless their hunger is switched off, or they're in creative or spectator. */
+    private fun exhaust(amount: Float) {
+        if (!world.features.hunger || (gameMode != GameMode.SURVIVAL && gameMode != GameMode.ADVENTURE)) return
+        hunger.exhaust(amount, peace = world.difficulty == Difficulty.PEACEFUL)
     }
 
     private fun hurtByWorld(around: Surroundings) {
@@ -3253,7 +3547,10 @@ class Session(
         if (around.cactus) hurt(1f, DamageCause.CACTUS)
         if (around.berryBush && (abs(delta.x) >= BERRY_PRICK_MOVE || abs(delta.z) >= BERRY_PRICK_MOVE)) hurt(1f, DamageCause.BERRY_BUSH)
         if (around.suffocating) hurt(1f, DamageCause.SUFFOCATION)
-        if (around.water || world.rainingAt(position.toBlockPos())) vitals.fireTicks = 0
+        if (vitals.fireTicks > 0 && (around.water || world.rainingAt(position.toBlockPos()))) {
+            vitals.fireTicks = 0
+            showAround(position.toBlockPos(), LevelSoundEvent(FIZZ, position, -1))
+        }
         if (vitals.fireTicks > 0) {
             if (vitals.fireTicks % BURN_INTERVAL == 0 && !around.lava && burns) hurt(1f, DamageCause.BURNING)
             vitals.fireTicks--
@@ -3297,13 +3594,31 @@ class Session(
         if (due(Effect.WITHER, WITHER_EVERY)) hurt(1f, DamageCause.WITHER)
     }
 
-    /** The player healing by themselves, as the rules let them: every four seconds while they're well fed, which for now they always are, and every second in peace. */
+    /**
+     * The player healing by themselves, as the rules let them: a point every
+     * four seconds while they have 18 food or more, which tires them, and
+     * every second in peace. Or, with no food at all, starving a point
+     * every four seconds, down to five hearts on easy and half a heart on
+     * normal, and to death on hard.
+     */
     private fun regenerate() {
-        if (!world.rules.naturalRegeneration) return
-        val interval = if (world.difficulty == Difficulty.PEACEFUL) PEACEFUL_REGENERATION_INTERVAL else REGENERATION_INTERVAL
-        if (++sinceRegeneration < interval) return
+        val rules = world.rules
+        val difficulty = world.difficulty
+        if (difficulty == Difficulty.PEACEFUL && rules.naturalRegeneration && aliveTicks % PEACEFUL_REGENERATION_INTERVAL == 0) heal(1f)
+        val regenerating = rules.naturalRegeneration && hunger.food >= WELL_FED && vitals.health < vitals.maxHealth
+        val starving = hunger.food <= 0
+        if (!regenerating && !starving) {
+            sinceRegeneration = 0
+            return
+        }
+        if (++sinceRegeneration < REGENERATION_INTERVAL) return
         sinceRegeneration = 0
-        heal(1f)
+        if (regenerating) {
+            heal(1f)
+            exhaust(REGENERATION_EXHAUSTION)
+        } else if (difficulty == Difficulty.HARD || vitals.health > STARVES_DOWN_TO.getValue(difficulty)) {
+            hurt(1f, DamageCause.STARVATION)
+        }
     }
 
     /** The player's health and absorption, as their client shows them: in whole half hearts, rounded up, as the game shows them. */
@@ -3314,6 +3629,19 @@ class Session(
 
     private fun sendHealth() {
         if (isInGame) send(UpdateAttributes(entityId, healthAttributes()))
+    }
+
+    /** The player's food bar, saturation and exhaustion, as their client shows them. */
+    private fun hungerAttributes() = listOf(
+        Attribute(FOOD, 0f, MAX_FOOD.toFloat(), hunger.food.toFloat(), default = MAX_FOOD.toFloat()),
+        Attribute(SATURATION, 0f, MAX_FOOD.toFloat(), hunger.saturation, default = MAX_FOOD.toFloat()),
+        Attribute(EXHAUSTION, 0f, SHOWN_MAX_EXHAUSTION, hunger.exhaustion.coerceAtMost(SHOWN_MAX_EXHAUSTION), default = 0f),
+    )
+
+    private fun sendHunger() {
+        if (!isInGame) return
+        send(UpdateAttributes(entityId, hungerAttributes()))
+        shownHunger = hunger.food to hunger.saturation
     }
 
     /** Kills the player, as `/kill` does, unless they're in creative, where nothing can. Returns whether they died. */
@@ -3333,6 +3661,8 @@ class Session(
      */
     private fun die(cause: String) {
         dead = true
+        eating = null
+        cooldowns.clear()
         stopBreaking()
         closeWindow(reply = true, byServer = true)
         vitals.health = 0f
@@ -3406,6 +3736,7 @@ class Session(
         dead = false
         bodyGone = false
         vitals.reset()
+        hunger.reset()
         breathing = true
         val eyes = spawnEyes()
         send(Respawn(eyes, Respawn.READY_TO_SPAWN, entityId), *playerState())
@@ -3517,18 +3848,25 @@ class Session(
             .putInt("PlayerLevel", experience.level)
             .putFloat("PlayerLevelProgress", experience.progress)
             .apply { spawnPoint?.let { putInt("SpawnX", it.x).putInt("SpawnY", it.y).putInt("SpawnZ", it.z) } }
-            .putList("Attributes", NbtType.COMPOUND, listOf(savedHealth()))
+            .putList("Attributes", NbtType.COMPOUND, savedAttributes())
             .putShort("Air", vitals.air.coerceAtLeast(0).toShort())
             .putShort("Fire", vitals.fireTicks.toShort())
             .build()
     }
 
-    /** The player's health, as the game saves it among their attributes. */
-    private fun savedHealth(): NbtMap = NbtMap.builder()
-        .putString("Name", HEALTH)
-        .putFloat("Base", MAX_HEALTH).putFloat("Current", vitals.health)
-        .putFloat("Min", 0f).putFloat("Max", MAX_HEALTH)
-        .putFloat("DefaultMin", 0f).putFloat("DefaultMax", MAX_HEALTH)
+    /** The player's health and hunger, as the game saves them among their attributes. */
+    private fun savedAttributes(): List<NbtMap> = listOf(
+        savedAttribute(HEALTH, vitals.health, MAX_HEALTH, MAX_HEALTH),
+        savedAttribute(FOOD, hunger.food.toFloat(), MAX_FOOD.toFloat(), MAX_FOOD.toFloat()),
+        savedAttribute(SATURATION, hunger.saturation, MAX_FOOD.toFloat(), MAX_FOOD.toFloat()),
+        savedAttribute(EXHAUSTION, hunger.exhaustion, 0f, SHOWN_MAX_EXHAUSTION),
+    )
+
+    private fun savedAttribute(name: String, current: Float, base: Float, max: Float): NbtMap = NbtMap.builder()
+        .putString("Name", name)
+        .putFloat("Base", base).putFloat("Current", current)
+        .putFloat("Min", 0f).putFloat("Max", max)
+        .putFloat("DefaultMin", 0f).putFloat("DefaultMax", max)
         .build()
 
     /** Picks up where the player left off last time, as [savedData] kept it, for whatever it kept that Kore can use. */
@@ -3554,9 +3892,16 @@ class Session(
         }
         experience = PlayerExperience(data.getInt("PlayerLevel", 0).coerceAtLeast(0), data.getFloat("PlayerLevelProgress", 0f).coerceIn(0f, 1f))
         if (listOf("SpawnX", "SpawnY", "SpawnZ").all(data::containsKey)) spawnPoint = BlockPos(data.getInt("SpawnX"), data.getInt("SpawnY"), data.getInt("SpawnZ"))
-        data.getList("Attributes", NbtType.COMPOUND, emptyList()).find { it.getString("Name") == HEALTH }?.let { vitals.health = it.getFloat("Current", MAX_HEALTH).coerceIn(0f, MAX_HEALTH) }
+        val attributes = data.getList("Attributes", NbtType.COMPOUND, emptyList()).associateBy { it.getString("Name") }
+        attributes[HEALTH]?.let { vitals.health = it.getFloat("Current", MAX_HEALTH).coerceIn(0f, MAX_HEALTH) }
+        attributes[FOOD]?.let { hunger.food = it.getFloat("Current", MAX_FOOD.toFloat()).toInt().coerceIn(0, MAX_FOOD) }
+        attributes[SATURATION]?.let { hunger.saturation = it.getFloat("Current", STARTING_SATURATION).coerceIn(0f, hunger.food.toFloat()) }
+        attributes[EXHAUSTION]?.let { hunger.exhaustion = it.getFloat("Current", 0f).coerceIn(0f, SHOWN_MAX_EXHAUSTION) }
         // Health saved as none is a player who left dead, back as if they'd respawned.
-        if (vitals.isDead) vitals.reset()
+        if (vitals.isDead) {
+            vitals.reset()
+            hunger.reset()
+        }
         vitals.air = data.getShort("Air", PLAYER_MAX_AIR).toInt().coerceIn(0, PLAYER_MAX_AIR.toInt())
         vitals.fireTicks = data.getShort("Fire", 0).toInt().coerceAtLeast(0)
         log.debug("{} picks up at {}, in {}", player?.displayName, position, gameMode)
@@ -3582,6 +3927,7 @@ class Session(
         if (dead) {
             position = spawnEyes()
             vitals.reset()
+            hunger.reset()
         }
         game.players.save(identity.uuid, savedData())
         state = State.CLOSED
@@ -3615,10 +3961,7 @@ class Session(
             entityId,
             healthAttributes() + listOf(
                 Attribute("minecraft:movement", 0f, Float.MAX_VALUE, PLAYER_WALK_SPEED),
-                Attribute("minecraft:player.hunger", 0f, 20f, 20f),
-                Attribute("minecraft:player.saturation", 0f, 20f, 5f, default = 20f), // The 5 a new player starts with
-                Attribute("minecraft:player.exhaustion", 0f, 5f, 0f),
-            ) + experienceAttributes(),
+            ) + hungerAttributes() + experienceAttributes(),
         ),
         abilities(),
     )

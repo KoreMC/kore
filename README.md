@@ -120,7 +120,7 @@ Packages leave out the common root, so `org.koremc.network` lives in `src/main/k
 - [x] Water, lava and fire
 - [x] Growth, time and weather
 - [x] Health, damage and respawning
-- [ ] Hunger and eating
+- [x] Hunger and eating
 - [ ] Mobs
 - [ ] The rest of the game's commands
 

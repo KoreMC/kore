@@ -541,16 +541,18 @@ private fun FlatWorld.comparatorBack(pos: BlockPos, state: BlockState): Int {
  * or null for a block it reads nothing of. A container is as full as its
  * slots are, each of the most it holds of a stack, a double chest as one:
  * 1 for anything in it at all, up to 15 with every slot full. A cake reads
- * more for each slice left, a composter for each level, a cauldron for
- * each third, a respawn anchor for each charge, and a beehive or bee nest
- * for its honey. An end portal frame reads full with an eye in it, an item
- * frame by which of its eight ways its item is turned, a lectern by how
- * far through its book the reader is, a crafter by how many of its slots
- * are full or switched off, and a jukebox by its disc.
+ * more for each slice left, and as whole with a candle on it, a composter
+ * for each level, a cauldron for each third, a respawn anchor for each
+ * charge, and a beehive or bee nest for its honey. An end portal frame
+ * reads full with an eye in it, an item frame by which of its eight ways
+ * its item is turned, a lectern by how far through its book the reader
+ * is, a crafter by how many of its slots are full or switched off, and a
+ * jukebox by its disc.
  */
 internal fun FlatWorld.fullness(pos: BlockPos): Int? {
     val state = stateAt(pos) ?: return null
     val properties = state.properties
+    if (state.hasCandle) return WHOLE_CAKE_FULLNESS
     when (state.name) {
         CAULDRON -> return cauldronFullness(state)
         JUKEBOX -> return discPower(pos)

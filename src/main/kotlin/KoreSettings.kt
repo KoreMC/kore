@@ -67,6 +67,10 @@ private val COMMENTS = mapOf(
         "Off, they keep what's put in them, and do nothing with it.",
     "features.damage" to "Players being hurt: by falling, the void, lava, fire and burning, drowning, suffocating, magma, campfires,\n" +
         "cactus and berry bushes, poison and wither, and healing again over time. Off, nothing hurts them but /kill.",
+    "features.hunger" to "The food bar going down as players sprint, swim, jump, mine and are hurt, and starving them once it's empty.\n" +
+        "Off, it stays full.",
+    "features.food" to "Eating and drinking: food and cake filling the food bar, and what food, potions and milk give, like a golden apple's effects.\n" +
+        "Off, they're only items, and cake only a block.",
     "commandLimits" to "The most blocks a command changes at once: a number, true for the game's own limit, or false for none.\n" +
         "Past the game's own, a big fill or clone can hold the server up a moment as it works, and players' games as they take it in.",
     "commandLimits.fill" to "The most blocks /fill fills. The game's own limit is 32768.",

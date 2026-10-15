@@ -157,7 +157,7 @@ class Drops(items: List<ItemDefinition>, creative: CreativeInventory, blocks: Bl
         val fortune = tool?.levelOf(FORTUNE)?.coerceIn(0, 3) ?: 0
         val whole = when {
             tool?.item?.name == SHEARS && (name in SHEARS_ONLY || name in LEAF_SAPLINGS || name == "minecraft:mangrove_leaves" || name == "minecraft:web") -> true
-            tool != null && tool.levelOf(SILK_TOUCH) > 0 && name !in NO_SILK_TOUCH -> true
+            tool != null && tool.levelOf(SILK_TOUCH) > 0 && name !in NO_SILK_TOUCH && !state.hasCandle -> true
             else -> false
         }
         val dropped = when {
@@ -176,10 +176,11 @@ class Drops(items: List<ItemDefinition>, creative: CreativeInventory, blocks: Bl
         return ORE_EXPERIENCE[state.name]?.let { random.nextInt(it.first, it.last + 1) } ?: 0
     }
 
-    /** What [state] drops broken as it is, without a tool that changes that. */
+    /** What [state] drops broken as it is, without a tool that changes that. A cake with a candle drops only the candle. */
     private fun own(state: BlockState, blockEntity: NbtMap?, contents: List<ItemStack?>): List<ItemStack> {
         if (dropsNothing(state.name)) return emptyList()
-        val (name, count) = DROPS_INSTEAD[state.name]?.let { it to 1 } ?: singleSlabOf(state.name)?.let { it to 2 } ?: ((itemPlacing(state.name) ?: state.name) to 1)
+        val (name, count) = (DROPS_INSTEAD[state.name] ?: state.candle)?.let { it to 1 } ?: singleSlabOf(state.name)?.let { it to 2 }
+            ?: ((itemPlacing(state.name) ?: state.name) to 1)
         // Beds and banners keep their colour in their block entity, as their items do in their aux value.
         val stack = stacks.of(name, count, aux = keptColour(blockEntity) ?: 0) ?: return emptyList()
         val held = contents.withIndex().mapNotNull { (slot, item) -> item?.let { slot to it } }

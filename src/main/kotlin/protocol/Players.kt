@@ -12,6 +12,7 @@ private const val SET_SPAWN_POSITION = 43
 internal const val ANIMATE = 44
 internal const val RESPAWN = 45
 private const val PLAYER_LIST = 63
+private const val PLAYER_START_ITEM_COOLDOWN = 176
 private const val DEATH_INFO = 189
 
 /**
@@ -64,6 +65,20 @@ data class DeathInfo(val cause: String, val parameters: List<String>) : ServerPa
         out.writeString(cause)
         out.writeVarUInt(parameters.size)
         parameters.forEach(out::writeString)
+    }
+}
+
+/**
+ * Starts the wait of [ticks] before the player can use an item of the kind
+ * the game calls [category] again, like `chorusfruit`, which the client
+ * shows over those items in the hotbar and counts down itself.
+ */
+data class PlayerStartItemCooldown(val category: String, val ticks: Int) : ServerPacket {
+    override val id get() = PLAYER_START_ITEM_COOLDOWN
+
+    override fun encodeBody(out: ByteBuf) {
+        out.writeString(category)
+        out.writeVarInt(ticks)
     }
 }
 

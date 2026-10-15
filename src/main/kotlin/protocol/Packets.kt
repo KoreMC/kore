@@ -94,6 +94,7 @@ enum class InputFlag(val id: Int) {
     STOP_SPRINTING(26),
     START_SWIMMING(29),
     STOP_SWIMMING(30),
+    START_JUMPING(31),
     START_GLIDING(32),
     STOP_GLIDING(33),
 
@@ -479,6 +480,7 @@ fun decodeClientPacket(packet: ByteArray): ClientPacket {
             INVENTORY_TRANSACTION -> decodeInventoryTransaction(buffer)
             LEVEL_SOUND_EVENT -> decodeLevelSoundEvent(buffer)
             MOB_EQUIPMENT -> decodeMobEquipment(buffer)
+            ACTOR_EVENT -> ActorEvent(entityId = buffer.readVarULong(), event = buffer.readUnsignedByte().toInt(), data = buffer.readVarInt())
             ANIMATE -> decodeAnimate(buffer)
             TEXT -> decodeText(buffer)
             COMMAND_REQUEST -> decodeCommandRequest(buffer)

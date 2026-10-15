@@ -33,11 +33,23 @@ data class Features(
      * but `/kill`.
      */
     val damage: Boolean = true,
+    /**
+     * The food bar going down as players sprint, swim, jump, mine and are
+     * hurt, and starving them once it's empty. Off, it stays full.
+     */
+    val hunger: Boolean = true,
+    /**
+     * Eating and drinking: food and cake filling the food bar, and what
+     * food, potions and milk give, like a golden apple's effects. Off,
+     * they're only items, and cake only a block.
+     */
+    val food: Boolean = true,
 ) {
     /** The names of the systems switched off, as kore.json names them. */
     val off: List<String>
         get() = listOfNotNull(
             "redstone".takeUnless { redstone }, "liquids".takeUnless { liquids }, "fallingBlocks".takeUnless { fallingBlocks },
             "growth".takeUnless { growth }, "machines".takeUnless { machines }, "damage".takeUnless { damage },
+            "hunger".takeUnless { hunger }, "food".takeUnless { food },
         )
 }

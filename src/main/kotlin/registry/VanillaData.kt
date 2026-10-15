@@ -3,6 +3,11 @@ package org.koremc.registry
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
 import org.cloudburstmc.nbt.NbtMap
 import org.cloudburstmc.nbt.NbtType
 import org.cloudburstmc.nbt.NbtUtils
@@ -10,6 +15,7 @@ import java.nio.file.Path
 import java.util.Base64
 import kotlin.io.path.inputStream
 import kotlin.io.path.readText
+import kotlin.math.roundToInt
 
 private val json = Json { ignoreUnknownKeys = true }
 
@@ -82,15 +88,86 @@ private class ItemDetails(
     val maxDurability: Int = 0,
     val repairWith: List<String> = emptyList(),
     val enchantCategories: List<String> = emptyList(),
+    /** The item's components, as NBT written out in JSON: each tag a `type` and a `value`. */
+    val nbt: JsonObject? = null,
 )
+
+/** The tag called [name] in this compound tag, as NBT written out in JSON has it. */
+private fun JsonObject.tag(name: String): JsonObject? = (this["value"] as? JsonObject)?.get(name) as? JsonObject
+
+private val JsonObject.number get() = (this["value"] as? JsonPrimitive)?.doubleOrNull
+private val JsonObject.text get() = (this["value"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+
+/** The values of this list tag, as NBT written out in JSON has it: each a tag of the list's type. */
+private val JsonObject.items get() = ((this["value"] as? JsonObject)?.get("value") as? JsonArray).orEmpty()
+
+/** What the effects of suspicious stew are, by its data value: the effect of the flower in it, and for how many ticks. */
+private val SUSPICIOUS_STEW_EFFECTS = listOf(
+    16 to 100, 8 to 100, 18 to 140, 15 to 140, 19 to 220, 23 to 6, 23 to 6, 12 to 60, 10 to 140, 20 to 140, 16 to 100, 15 to 140, 9 to 140,
+)
+
+/** The effect suspicious stew with the data value [aux] gives, and for how many ticks, or null for one the game doesn't have. */
+fun suspiciousStewEffect(aux: Int): Pair<Int, Int>? = SUSPICIOUS_STEW_EFFECTS.getOrNull(aux)
+
+/**
+ * The drinks the game's item data has no food component for: a potion and
+ * milk, which leave their bottle and bucket, and an ominous bottle, which
+ * is gone once it's drunk. Any of them can be drunk on a full food bar.
+ */
+private val DRINKS = mapOf(
+    "minecraft:potion" to Food(0, 0f, canAlwaysEat = true, leaves = "minecraft:glass_bottle", action = FoodAction.POTION),
+    "minecraft:milk_bucket" to Food(0, 0f, canAlwaysEat = true, leaves = "minecraft:bucket", action = FoodAction.MILK),
+    "minecraft:ominous_bottle" to Food(0, 0f, canAlwaysEat = true, action = FoodAction.OMINOUS),
+)
+
+/**
+ * What eating an item does, from its components, [nbt], if they have the
+ * game's food component: its nutrition, saturation and effects, what it
+ * leaves, how many ticks eating it takes, from the component for it, in
+ * ticks, or the one for using items, in seconds, and the wait before
+ * another of its kind, like chorus fruit's.
+ */
+private fun foodOf(nbt: JsonObject?): Food? {
+    val components = nbt?.tag("components") ?: return null
+    val food = components.tag("minecraft:food") ?: return null
+    val seconds = components.tag("minecraft:use_modifiers")?.tag("use_duration")?.number
+    val ticks = components.tag("minecraft:use_duration")?.number?.toInt() ?: seconds?.let { (it * 20).roundToInt() } ?: DEFAULT_EATING_TICKS
+    val effects = food.tag("effects")?.items.orEmpty().mapNotNull { entry ->
+        val effect = (entry as? JsonObject)?.let { JsonObject(mapOf("value" to it)) } ?: return@mapNotNull null
+        FoodEffect(
+            effect = effect.tag("id")?.number?.toInt() ?: return@mapNotNull null,
+            amplifier = effect.tag("amplifier")?.number?.toInt() ?: 0,
+            seconds = effect.tag("duration")?.number?.toInt() ?: 0,
+            chance = effect.tag("chance")?.number?.toFloat() ?: 1f,
+        )
+    }
+    val cooldown = food.tag("cooldown_type")?.text?.takeIf { it.isNotEmpty() }
+        ?.let { category -> food.tag("cooldown_time")?.number?.toInt()?.takeIf { it > 0 }?.let { ItemCooldown(category, it) } }
+    return Food(
+        nutrition = food.tag("nutrition")?.number?.toInt() ?: 0,
+        saturationModifier = food.tag("saturation_modifier")?.number?.toFloat() ?: 0f,
+        canAlwaysEat = food.tag("can_always_eat")?.number == 1.0,
+        ticks = ticks,
+        leaves = food.tag("using_converts_to")?.text?.takeIf { it.isNotEmpty() }?.let { "minecraft:$it" },
+        effects = effects,
+        cures = food.tag("remove_effects")?.items.orEmpty().mapNotNull { (it as? JsonPrimitive)?.intOrNull },
+        action = when (food.tag("on_use_action")?.number?.toInt()) {
+            0 -> FoodAction.CHORUS_TELEPORT
+            1 -> FoodAction.SUSPICIOUS_STEW
+            else -> null
+        },
+        cooldown = cooldown,
+    )
+}
 
 /**
  * Reads the item list from `runtime_item_states.json`, giving each item its
  * entry from `item_components.nbt`, which is keyed by item name. How many
  * of an item a slot holds, what it's called, how long it lasts, what mends
- * it and which enchantments it takes come from the [details] in
- * minecraft-data's `items.json`, unless its components say. Items newer
- * than those details stack to 64, and get a name made from their
+ * it, which enchantments it takes and what eating it does come from the
+ * [details] in minecraft-data's `items.json`, unless its components say.
+ * The drinks those have no food for drink as [DRINKS] has them. Items
+ * newer than those details stack to 64, and get a name made from their
  * identifier.
  */
 fun readItems(itemStates: String, components: NbtMap, details: String = "[]"): List<ItemDefinition> {
@@ -111,6 +188,7 @@ fun readItems(itemStates: String, components: NbtMap, details: String = "[]"): L
             repairItems = detail?.repairWith.orEmpty().mapTo(HashSet()) { "minecraft:$it" },
             enchantCategories = categories,
             enchantability = itemComponents.enchantability() ?: enchantabilityOf(item.name, categories),
+            food = foodOf(detail?.nbt) ?: DRINKS[item.name],
         )
     }
     items.find { it.runtimeId !in Short.MIN_VALUE..Short.MAX_VALUE }?.let { error("${it.name}'s runtime ID ${it.runtimeId} doesn't fit in 16 bits") }

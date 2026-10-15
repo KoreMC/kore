@@ -20,6 +20,7 @@ import org.koremc.protocol.ARMOUR_WINDOW
 import org.koremc.protocol.ActorDataId
 import org.koremc.protocol.ActorEvent
 import org.koremc.protocol.ActorFlag
+import org.koremc.protocol.Attribute
 import org.koremc.protocol.BiomeDefinitionList
 import org.koremc.protocol.BlockActorData
 import org.koremc.protocol.BlockDefinitions
@@ -32,7 +33,9 @@ import org.koremc.protocol.GameMode
 import org.koremc.protocol.LevelEvent
 import org.koremc.protocol.InventorySlot
 import org.koremc.protocol.LevelSoundEvent
+import org.koremc.protocol.MobEffect
 import org.koremc.protocol.OpenSign
+import org.koremc.protocol.PlayerStartItemCooldown
 import org.koremc.world.strike
 import org.koremc.protocol.SetTime
 import org.koremc.protocol.AddLightning
@@ -42,6 +45,7 @@ import org.koremc.protocol.PlaySound
 import org.koremc.protocol.RemoveActor
 import org.koremc.protocol.Respawn
 import org.koremc.protocol.TakeItemActor
+import org.koremc.protocol.UpdateAttributes
 import org.koremc.protocol.UpdateBlock
 import org.koremc.protocol.SetActorData
 import org.koremc.protocol.ShowEquipment
@@ -77,6 +81,9 @@ import org.koremc.registry.CreativeGroup
 import org.koremc.registry.CreativeInventory
 import org.koremc.registry.CreativeItem
 import org.koremc.registry.EnchantmentLevel
+import org.koremc.registry.Food
+import org.koremc.registry.FoodAction
+import org.koremc.registry.ItemCooldown
 import org.koremc.registry.ItemDefinition
 import org.koremc.registry.ItemStack
 import org.koremc.registry.ItemStacks
@@ -89,11 +96,15 @@ import org.koremc.registry.dyedColour
 import org.koremc.registry.withDamage
 import org.koremc.registry.withEnchantments
 import org.koremc.world.BlockPos
+import org.koremc.world.Effect
+import org.koremc.world.EffectLevel
 import org.koremc.world.ChunkPos
+import org.koremc.world.DamageCause
 import org.koremc.world.centre
 import org.koremc.world.Drops
 import org.koremc.world.tickItems
 import org.koremc.world.Face
+import org.koremc.world.Features
 import org.koremc.world.FlatWorld
 import org.koremc.world.PLAYER_EYE_HEIGHT
 import org.koremc.world.PLAYER_MAX_AIR
@@ -142,6 +153,14 @@ private const val BUCKET_ITEM = 361
 private const val DISC_ITEM = 545
 private const val HELMET_ITEM = 338
 private const val ZOMBIE_HEAD_ITEM = 339
+private const val APPLE_ITEM = 257
+private const val STEW_ITEM = 260
+private const val BOWL_ITEM = 281
+private const val POTION_ITEM = 427
+private const val GLASS_BOTTLE_ITEM = 428
+private const val MILK_ITEM = 393
+private const val CHORUS_ITEM = 597
+private const val CANDLE_ITEM = 662
 
 /** The PlayerAction for breaking a block in creative. */
 private const val CREATIVE_DESTROY_BLOCK = 13
@@ -202,6 +221,9 @@ class SessionTest {
     /** An item frame on the floor, and a flower pot, empty and full. */
     private val frame = state("minecraft:frame", "facing_direction" to 1, "item_frame_map_bit" to 0.toByte(), "item_frame_photo_bit" to 0.toByte())
     private val pots = (0..1).map { full -> state("minecraft:flower_pot", "update_bit" to full.toByte()) }
+    /** Cake with each number of bites out of it, and cake with a candle, out and lit. */
+    private val cakes = (0..6).map { bites -> state("minecraft:cake", "bite_counter" to bites) }
+    private val candleCakes = (0..1).map { lit -> state("minecraft:candle_cake", "lit" to lit.toByte()) }
     private val poppy = BlockState("minecraft:poppy", NbtMap.EMPTY, version = 18168865)
     /** A cauldron at each level of water, by level, a jukebox and a note block. */
     private val cauldrons = (0..6).map { level -> state("minecraft:cauldron", "cauldron_liquid" to "water", "fill_level" to level) }
@@ -210,7 +232,7 @@ class SessionTest {
     private val fire = state("minecraft:fire", "age" to 0)
     private val zombieHead = state("minecraft:zombie_head", "facing_direction" to 1)
     private val furnace = state("minecraft:furnace", "minecraft:cardinal_direction" to "north")
-    private val palette = BlockPalette(listOf(air, stone, planks, torch, sand, sign, grass, farmland, dirt, wheat, frame, poppy, jukebox, noteBlock, fire, zombieHead, furnace) + pots + cauldrons + levers + buttons + doors + fences + water)
+    private val palette = BlockPalette(listOf(air, stone, planks, torch, sand, sign, grass, farmland, dirt, wheat, frame, poppy, jukebox, noteBlock, fire, zombieHead, furnace) + pots + cauldrons + levers + buttons + doors + fences + water + cakes + candleCakes)
     private val world = FlatWorld(palette, listOf(stone))
     private val creative = CreativeInventory(
         listOf(CreativeGroup(CreativeCategory.CONSTRUCTION, "", icon = null)),
@@ -230,6 +252,23 @@ class SessionTest {
     private val disc = ItemDefinition("minecraft:music_disc_cat", DISC_ITEM, componentBased = true, ItemVersion.NONE, maxStackSize = 1)
     private val helmet = ItemDefinition("minecraft:leather_helmet", HELMET_ITEM, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 55)
     private val zombieHeadItem = ItemDefinition("minecraft:zombie_head", ZOMBIE_HEAD_ITEM, componentBased = false, ItemVersion.NONE)
+    private val apple = ItemDefinition("minecraft:apple", APPLE_ITEM, componentBased = false, ItemVersion.NONE, food = Food(4, 0.3f))
+    private val stew = ItemDefinition("minecraft:mushroom_stew", STEW_ITEM, componentBased = false, ItemVersion.NONE, maxStackSize = 1, food = Food(6, 0.6f, leaves = "minecraft:bowl"))
+    private val bowl = ItemDefinition("minecraft:bowl", BOWL_ITEM, componentBased = false, ItemVersion.NONE)
+    private val potion = ItemDefinition(
+        "minecraft:potion", POTION_ITEM, componentBased = false, ItemVersion.NONE, maxStackSize = 1,
+        food = Food(0, 0f, canAlwaysEat = true, leaves = "minecraft:glass_bottle", action = FoodAction.POTION),
+    )
+    private val glassBottle = ItemDefinition("minecraft:glass_bottle", GLASS_BOTTLE_ITEM, componentBased = false, ItemVersion.NONE)
+    private val milk = ItemDefinition(
+        "minecraft:milk_bucket", MILK_ITEM, componentBased = false, ItemVersion.NONE, maxStackSize = 1,
+        food = Food(0, 0f, canAlwaysEat = true, leaves = "minecraft:bucket", action = FoodAction.MILK),
+    )
+    private val chorusFruit = ItemDefinition(
+        "minecraft:chorus_fruit", CHORUS_ITEM, componentBased = false, ItemVersion.NONE,
+        food = Food(4, 0.3f, canAlwaysEat = true, action = FoodAction.CHORUS_TELEPORT, cooldown = ItemCooldown("chorusfruit", 20)),
+    )
+    private val candle = ItemDefinition("minecraft:candle", CANDLE_ITEM, componentBased = false, ItemVersion.NONE)
 
     private val sent = mutableListOf<ByteArray>()
 
@@ -240,7 +279,7 @@ class SessionTest {
     private val mining = mapOf(stone.name to Mining(1.5, ToolKind.PICKAXE, harvestTier = 0))
     private val game = GameData(
         world, listOf(itemRegistry, biomes), blockDefinitions, creative, mining, Drops(creative.items.map { it.stack.item }, creative, palette),
-        ItemStacks(creative.items.map { it.stack.item } + pickaxe + hoe + poppyItem + waterBucket + bucket + disc + helmet + zombieHeadItem, creative, palette),
+        ItemStacks(creative.items.map { it.stack.item } + pickaxe + hoe + poppyItem + waterBucket + bucket + disc + helmet + zombieHeadItem + apple + stew + bowl + potion + glassBottle + milk + chorusFruit + candle, creative, palette),
     )
     private val session: Session by lazy {
         // The only player, so the only one to see what they change.
@@ -1254,7 +1293,7 @@ class SessionTest {
         sent.clear()
         clientSends(playerAuthInput(standing, inputs = listOf(VERTICAL_COLLISION)))
         assertEquals(15f, session.vitals.health)
-        assertTrue(receivedPackets().any { it.contentEquals(ActorEvent(7, ActorEvent.HURT, 0).encode()) })
+        assertTrue(receivedPackets().any { it.contentEquals(ActorEvent(7, ActorEvent.HURT, DamageCause.FALL.id).encode()) })
 
         session.changeGameMode(GameMode.CREATIVE)
         for (feet in listOf(-53f, -57f, -61f)) clientSends(playerAuthInput(Vec3(0.5f, feet + PLAYER_EYE_HEIGHT, 0.5f)))
@@ -1293,11 +1332,282 @@ class SessionTest {
     }
 
     @Test
+    fun `a burning player's hurt carries its cause, for the client to sound it as burning, and the fire on them fizzes out in water`() {
+        spawn()
+        sent.clear()
+        session.hurt(1f, DamageCause.BURNING)
+        // The client sounds a hurt by its cause, burning as burning.
+        assertTrue(receivedPackets().any { it.contentEquals(ActorEvent(7, ActorEvent.HURT, DamageCause.BURNING.id).encode()) })
+
+        session.vitals.fireTicks = 100
+        world[BlockPos(0, -63, 0)] = water[0]
+        session.tickHealth()
+        assertEquals(0, session.vitals.fireTicks)
+        assertTrue(receivedPackets().any { it.contentEquals(LevelSoundEvent("fizz", standing, -1).encode()) })
+    }
+
+    @Test
     fun `nothing kills a player in creative`() {
         config = config.copy(gameMode = GameMode.CREATIVE)
         spawn()
         assertFalse(session.kill())
         assertFalse(session.dead)
+    }
+
+    @Test
+    fun `a hungry player eats what they hold once it's taken as long as it takes, which fills their food bar and uses it up`() {
+        spawn()
+        session.give(ItemStack(apple, count = 2))
+        session.hunger.food = 10
+        session.hunger.saturation = 0f
+
+        clientSends(useInAir(slot = 0, held = APPLE_ITEM, legacyRequestId = 0))
+        repeat(20) { session.tickHealth() }
+        clientSends(useInAir(slot = 0, held = APPLE_ITEM, legacyRequestId = 0)) // Too soon: they're still eating
+        assertEquals(10, session.hunger.food)
+        repeat(12) { session.tickHealth() }
+        sent.clear()
+        clientSends(useInAir(slot = 0, held = APPLE_ITEM, legacyRequestId = 0))
+
+        assertEquals(14, session.hunger.food)
+        assertEquals(4 * 0.3f * 2, session.hunger.saturation)
+        assertEquals(1, session.heldStack?.count)
+        val hunger = UpdateAttributes(
+            7,
+            listOf(
+                Attribute("minecraft:player.hunger", 0f, 20f, 14f, default = 20f),
+                Attribute("minecraft:player.saturation", 0f, 20f, 4 * 0.3f * 2, default = 20f),
+                Attribute("minecraft:player.exhaustion", 0f, 5f, 0f, default = 0f),
+            ),
+        )
+        assertTrue(receivedPackets().any { it.contentEquals(hunger.encode()) })
+    }
+
+    @Test
+    fun `a full player can't start eating, and a bowl of stew eaten leaves the bowl in their hand`() {
+        spawn()
+        session.give(ItemStack(stew))
+
+        clientSends(useInAir(slot = 0, held = STEW_ITEM, legacyRequestId = 0))
+        repeat(32) { session.tickHealth() }
+        clientSends(useInAir(slot = 0, held = STEW_ITEM, legacyRequestId = 0))
+        assertEquals("minecraft:mushroom_stew", session.heldStack?.item?.name)
+
+        session.hunger.food = 10
+        clientSends(useInAir(slot = 0, held = STEW_ITEM, legacyRequestId = 0))
+        repeat(32) { session.tickHealth() }
+        clientSends(useInAir(slot = 0, held = STEW_ITEM, legacyRequestId = 0))
+        assertEquals(16, session.hunger.food)
+        assertEquals("minecraft:bowl", session.heldStack?.item?.name)
+    }
+
+    @Test
+    fun `letting go of the use button stops a player eating, so the next use starts afresh`() {
+        spawn()
+        session.give(ItemStack(apple))
+        session.hunger.food = 10
+
+        clientSends(useInAir(slot = 0, held = APPLE_ITEM, legacyRequestId = 0))
+        repeat(20) { session.tickHealth() }
+        clientSends(releaseItem(slot = 0, held = APPLE_ITEM))
+        repeat(12) { session.tickHealth() }
+        clientSends(useInAir(slot = 0, held = APPLE_ITEM, legacyRequestId = 0))
+        assertEquals(10, session.hunger.food)
+
+        repeat(32) { session.tickHealth() }
+        clientSends(useInAir(slot = 0, held = APPLE_ITEM, legacyRequestId = 0))
+        assertEquals(14, session.hunger.food)
+    }
+
+    @Test
+    fun `with food switched off, food is only an item, and with hunger switched off, the food bar stays full`() {
+        world.features = Features(hunger = false, food = false)
+        spawn()
+        session.give(ItemStack(apple))
+        session.hunger.food = 10
+
+        clientSends(useInAir(slot = 0, held = APPLE_ITEM, legacyRequestId = 0))
+        repeat(32) { session.tickHealth() }
+        clientSends(useInAir(slot = 0, held = APPLE_ITEM, legacyRequestId = 0))
+        assertEquals(1, session.heldStack?.count)
+        assertEquals(20, session.hunger.food)
+
+        session.hunger.food = 10
+        world[BlockPos(1, -63, 0)] = cakes[0]
+        clientSends(placeBlock(against = BlockPos(1, -63, 0), face = 1, slot = 1, held = 0))
+        assertEquals(cakes[0], world.stateAt(BlockPos(1, -63, 0)))
+    }
+
+    @Test
+    fun `a well-fed player heals a point every four seconds, which tires them, and a starving one is hurt, down to half a heart on normal`() {
+        spawn()
+        session.vitals.health = 10f
+        repeat(80) { session.tickHealth() }
+        assertEquals(11f, session.vitals.health)
+        assertEquals(4f, session.hunger.saturation) // Healing's 6 exhaustion took a point
+
+        session.hunger.food = 0
+        session.hunger.saturation = 0f
+        session.vitals.health = 2f
+        repeat(80) { session.tickHealth() }
+        assertEquals(1f, session.vitals.health)
+        repeat(160) { session.tickHealth() }
+        assertEquals(1f, session.vitals.health)
+    }
+
+    @Test
+    fun `sprinting on the ground tires a player by the block, which takes their saturation before their food, but a teleport doesn't`() {
+        spawn()
+        clientSends(playerAuthInput(standing, inputs = listOf(START_SPRINTING, VERTICAL_COLLISION), tick = 101))
+        for (step in 1..45) clientSends(playerAuthInput(Vec3(standing.x + step, standing.y, standing.z), inputs = listOf(VERTICAL_COLLISION), tick = 101L + step))
+        assertEquals(4f, session.hunger.saturation)
+        assertEquals(20, session.hunger.food)
+
+        val tired = session.hunger.exhaustion
+        clientSends(playerAuthInput(Vec3(standing.x + 145, standing.y, standing.z), inputs = listOf(VERTICAL_COLLISION), tick = 200))
+        assertEquals(tired, session.hunger.exhaustion)
+    }
+
+    @Test
+    fun `a potion drunk gives its effects and leaves its bottle, though it doesn't feed, and a healing one heals at once`() {
+        spawn()
+        session.give(ItemStack(potion, aux = 28)) // Regeneration
+        sent.clear()
+
+        clientSends(useInAir(slot = 0, held = POTION_ITEM, legacyRequestId = 0)) // A full player can still drink
+        repeat(32) { session.tickHealth() }
+        clientSends(useInAir(slot = 0, held = POTION_ITEM, legacyRequestId = 0))
+        assertTrue(receivedPackets().any { it.contentEquals(MobEffect(7, MobEffect.ADD, Effect.REGENERATION, 0, 900).encode()) })
+        assertEquals("minecraft:glass_bottle", session.heldStack?.item?.name)
+        assertEquals(5f, session.hunger.saturation)
+
+        session.give(ItemStack(potion, aux = 22)) // Healing II
+        clientSends(useInAir(slot = 1, held = POTION_ITEM, legacyRequestId = 0))
+        repeat(32) { session.tickHealth() }
+        session.vitals.health = 10f
+        clientSends(useInAir(slot = 1, held = POTION_ITEM, legacyRequestId = 0))
+        assertEquals(18f, session.vitals.health)
+    }
+
+    @Test
+    fun `milk takes every effect away, and leaves the bucket`() {
+        spawn()
+        session.setEffect(EffectLevel(Effect.SPEED), 600, particles = true)
+        session.give(ItemStack(milk))
+        sent.clear()
+
+        clientSends(useInAir(slot = 0, held = MILK_ITEM, legacyRequestId = 0))
+        repeat(32) { session.tickHealth() }
+        clientSends(useInAir(slot = 0, held = MILK_ITEM, legacyRequestId = 0))
+        assertTrue(receivedPackets().any { it.contentEquals(MobEffect(7, MobEffect.REMOVE, Effect.SPEED).encode()) })
+        assertEquals("minecraft:bucket", session.heldStack?.item?.name)
+    }
+
+    @Test
+    fun `chorus fruit can't be started on again until its wait is over, which the client hears of`() {
+        spawn()
+        session.give(ItemStack(chorusFruit, count = 3))
+        sent.clear()
+
+        clientSends(useInAir(slot = 0, held = CHORUS_ITEM, legacyRequestId = 0))
+        repeat(32) { session.tickHealth() }
+        clientSends(useInAir(slot = 0, held = CHORUS_ITEM, legacyRequestId = 0))
+        assertEquals(2, session.heldStack?.count)
+        assertTrue(receivedPackets().any { it.contentEquals(PlayerStartItemCooldown("chorusfruit", 20).encode()) })
+
+        clientSends(releaseItem(slot = 0, held = CHORUS_ITEM))
+        clientSends(useInAir(slot = 0, held = CHORUS_ITEM, legacyRequestId = 0)) // Too soon to start another
+        repeat(32) { session.tickHealth() }
+        clientSends(useInAir(slot = 0, held = CHORUS_ITEM, legacyRequestId = 0)) // So this only starts it
+        assertEquals(2, session.heldStack?.count)
+        repeat(32) { session.tickHealth() }
+        clientSends(useInAir(slot = 0, held = CHORUS_ITEM, legacyRequestId = 0))
+        assertEquals(1, session.heldStack?.count)
+    }
+
+    @Test
+    fun `holding the use button down eats one after another, each use that finishes one starting on the next`() {
+        spawn()
+        session.give(ItemStack(apple, count = 3))
+        session.hunger.food = 5
+
+        clientSends(useInAir(slot = 0, held = APPLE_ITEM, legacyRequestId = 0))
+        repeat(32) { session.tickHealth() }
+        clientSends(useInAir(slot = 0, held = APPLE_ITEM, legacyRequestId = 0))
+        assertEquals(9, session.hunger.food)
+        repeat(32) { session.tickHealth() }
+        clientSends(useInAir(slot = 0, held = APPLE_ITEM, legacyRequestId = 0))
+        assertEquals(13, session.hunger.food)
+        assertEquals(1, session.heldStack?.count)
+    }
+
+    @Test
+    fun `the client's eating goes back to it and everyone around, by what the player holds, so they hear it`() {
+        spawn()
+        session.give(ItemStack(potion, aux = 5))
+        sent.clear()
+
+        clientSends(eatingEvent(data = 0))
+        assertTrue(receivedPackets().any { it.contentEquals(ActorEvent(7, ActorEvent.EATING_ITEM, POTION_ITEM shl 16 or 5).encode()) })
+
+        clientSends(mobEquipment(slot = 1)) // Nothing to eat in hand
+        clientSends(eatingEvent(data = 0))
+        assertTrue(receivedPackets().none { it.contentEquals(ActorEvent(7, ActorEvent.EATING_ITEM, POTION_ITEM shl 16 or 5).encode()) })
+    }
+
+    @Test
+    fun `a hungry player eats cake a slice at a time, the last slice taking the cake, but a full one can't`() {
+        spawn()
+        val at = BlockPos(1, -63, 0)
+        world[at] = cakes[0]
+
+        clientSends(placeBlock(against = at, face = 1, slot = 0, held = 0))
+        assertEquals(cakes[0], world.stateAt(at))
+
+        session.hunger.food = 10
+        clientSends(placeBlock(against = at, face = 1, slot = 0, held = 0))
+        assertEquals(cakes[1], world.stateAt(at))
+        assertEquals(12, session.hunger.food)
+        assertEquals(5f + 2 * 0.1f * 2, session.hunger.saturation)
+
+        world[at] = cakes[6]
+        clientSends(placeBlock(against = at, face = 1, slot = 0, held = 0))
+        assertEquals(AIR, world.stateAt(at)?.name)
+    }
+
+    @Test
+    fun `a lit candle on a cake goes out at a click, and the next eats a slice, popping the candle off`() {
+        spawn()
+        val at = BlockPos(1, -63, 0)
+        world[at] = candleCakes[1]
+        session.hunger.food = 10
+
+        clientSends(placeBlock(against = at, face = 1, slot = 0, held = 0))
+        assertEquals(candleCakes[0], world.stateAt(at))
+        assertEquals(10, session.hunger.food)
+
+        clientSends(placeBlock(against = at, face = 1, slot = 0, held = 0))
+        assertEquals(cakes[1], world.stateAt(at))
+        assertEquals(listOf(ItemStack(candle)), world.items.map { it.stack })
+    }
+
+    @Test
+    fun `a candle goes on a whole cake, used up, but a bitten one is eaten instead`() {
+        spawn()
+        val at = BlockPos(1, -63, 0)
+        world[at] = cakes[0]
+        session.give(ItemStack(candle, count = 2))
+        session.hunger.food = 10
+
+        clientSends(placeBlock(against = at, face = 1, slot = 0, held = CANDLE_ITEM))
+        assertEquals(candleCakes[0], world.stateAt(at))
+        assertEquals(1, session.heldStack?.count)
+        assertEquals(10, session.hunger.food)
+
+        world[at] = cakes[1]
+        clientSends(placeBlock(against = at, face = 1, slot = 0, held = CANDLE_ITEM))
+        assertEquals(cakes[2], world.stateAt(at))
+        assertEquals(1, session.heldStack?.count)
     }
 
     @Test
@@ -1739,6 +2049,16 @@ class SessionTest {
             .writeFloatLE(0f).writeFloatLE(0f).writeFloatLE(0f)
             .writeVarUInt(0).writeBoolean(false).writeByte(0),
     )
+
+    /** An inventory transaction letting go of the use button with [held] in hotbar [slot], as stopping eating does. */
+    private fun releaseItem(slot: Int, held: Int) = ByteBufUtil.getBytes(
+        Unpooled.buffer().writeVarUInt(30).writeVarInt(0).writeBoolean(false).writeVarUInt(4).writeVarUInt(0)
+            .writeVarUInt(0).writeVarInt(slot).heldItem(held, 1).writeZero(12),
+    )
+
+    /** The client saying its player is eating, as it does every few ticks while it eats, with [data] about what. */
+    private fun eatingEvent(data: Int) =
+        ByteBufUtil.getBytes(Unpooled.buffer().writeVarUInt(27).writeVarULong(7).writeByte(ActorEvent.EATING_ITEM).writeVarInt(data).writeBoolean(false))
 
     private fun mobEquipment(slot: Int) = ByteBufUtil.getBytes(
         Unpooled.buffer().writeVarUInt(31).writeVarULong(7).heldItem(PLANKS_ITEM).writeByte(slot).writeByte(slot).writeByte(0),

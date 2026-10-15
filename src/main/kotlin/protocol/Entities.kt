@@ -9,7 +9,7 @@ private const val REMOVE_ACTOR = 14
 private const val ADD_ITEM_ACTOR = 15
 private const val TAKE_ITEM_ACTOR = 17
 private const val MOVE_ACTOR_ABSOLUTE = 18
-private const val ACTOR_EVENT = 27
+internal const val ACTOR_EVENT = 27
 private const val SET_ACTOR_MOTION = 40
 private const val INVENTORY_SLOT = 50
 
@@ -187,8 +187,13 @@ data class SetActorMotion(val entityId: Long, val motion: Vec3) : ServerPacket {
     }
 }
 
-/** Something happening to the entity [entityId] that the client shows, like [UPDATE_STACK_SIZE], with [data] about it. */
-data class ActorEvent(val entityId: Long, val event: Int, val data: Int) : ServerPacket {
+/**
+ * Something happening to the entity [entityId] that the client shows, like
+ * [UPDATE_STACK_SIZE], with [data] about it. The client sends some of its
+ * own player's, like [EATING_ITEM], for the server to show everyone, its
+ * own player too.
+ */
+data class ActorEvent(val entityId: Long, val event: Int, val data: Int) : ServerPacket, ClientPacket {
     override val id get() = ACTOR_EVENT
 
     override fun encodeBody(out: ByteBuf) {
@@ -204,6 +209,14 @@ data class ActorEvent(val entityId: Long, val event: Int, val data: Int) : Serve
 
         /** An entity dying: it falls over, tinted red. */
         const val DEATH = 3
+
+        /**
+         * A player eating or drinking, which the client sends every few
+         * ticks while it does: the sound of it, and the bits of what they
+         * eat that fly from their mouth. The data is the item's network ID,
+         * shifted up 16 bits, and its data value.
+         */
+        const val EATING_ITEM = 57
 
         /** An item entity's stack changing size, as when items merge. The data is how many it holds now. */
         const val UPDATE_STACK_SIZE = 69

@@ -75,6 +75,9 @@ data class InventoryTransaction(
 
         /** An item used on a block. */
         const val USE_ITEM = 2
+
+        /** The player letting go of what they were using, like food they were eating. */
+        const val RELEASE_ITEM = 4
     }
 }
 

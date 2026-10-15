@@ -30,6 +30,8 @@ enum class ActorFlag(val bit: Int) {
     ON_FIRE(0),
     SNEAKING(1),
     SPRINTING(3),
+    /** Using what it holds, like eating. */
+    USING_ITEM(4),
     INVISIBLE(5),
     SHOW_NAME(14),
     ALWAYS_SHOW_NAME(15),

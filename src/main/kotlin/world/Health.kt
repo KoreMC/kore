@@ -17,12 +17,15 @@ private const val HURT_GRACE = 10
 private const val MAX_PROTECTION = 20
 
 /**
- * What hurt a player: the key of the message that says they died of it,
- * whether armour takes a share of it, whether it's fire, which Fire
- * Protection lessens, or a fall, which Feather Falling does, and whether
- * Resistance lessens it. Nothing lessens the void.
+ * What hurt a player: the game's number for it, which the client hears
+ * with the hurt and picks its sound by, so burning and drowning sound as
+ * they do; the key of the message that says they died of it; whether
+ * armour takes a share of it; whether it's fire, which Fire Protection
+ * lessens, or a fall, which Feather Falling does; and whether Resistance
+ * lessens it. Nothing lessens the void.
  */
 enum class DamageCause(
+    val id: Int,
     val message: String,
     val armour: Boolean,
     val fire: Boolean = false,
@@ -30,20 +33,21 @@ enum class DamageCause(
     val resisted: Boolean = true,
     val void: Boolean = false,
 ) {
-    FALL("death.attack.fall", armour = false, fall = true),
-    VOID("death.attack.outOfWorld", armour = false, resisted = false, void = true),
-    LAVA("death.attack.lava", armour = true, fire = true),
-    FIRE("death.attack.inFire", armour = true, fire = true),
-    BURNING("death.attack.onFire", armour = false, fire = true),
-    MAGMA("death.attack.magma", armour = true, fire = true),
-    CACTUS("death.attack.cactus", armour = true),
-    BERRY_BUSH("death.attack.sweetBerry", armour = true),
-    SUFFOCATION("death.attack.inWall", armour = false),
-    DROWNING("death.attack.drown", armour = false),
-    LIGHTNING("death.attack.lightningBolt", armour = true),
-    MAGIC("death.attack.magic", armour = false),
-    WITHER("death.attack.wither", armour = false),
-    STARVATION("death.attack.starve", armour = false, resisted = false),
+    FALL(5, "death.attack.fall", armour = false, fall = true),
+    VOID(12, "death.attack.outOfWorld", armour = false, resisted = false, void = true),
+    LAVA(8, "death.attack.lava", armour = true, fire = true),
+    FIRE(6, "death.attack.inFire", armour = true, fire = true),
+    BURNING(7, "death.attack.onFire", armour = false, fire = true),
+    MAGMA(22, "death.attack.magma", armour = true, fire = true),
+    // The game counts both as touching what pricks.
+    CACTUS(1, "death.attack.cactus", armour = true),
+    BERRY_BUSH(1, "death.attack.sweetBerry", armour = true),
+    SUFFOCATION(4, "death.attack.inWall", armour = false),
+    DROWNING(9, "death.attack.drown", armour = false),
+    LIGHTNING(24, "death.attack.lightningBolt", armour = true),
+    MAGIC(14, "death.attack.magic", armour = false),
+    WITHER(15, "death.attack.wither", armour = false),
+    STARVATION(16, "death.attack.starve", armour = false, resisted = false),
 }
 
 /** Each kind of armour's points, worn on the head, chest, legs and feet, and its toughness, which keeps it from giving way to a hard blow. */

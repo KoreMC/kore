@@ -69,7 +69,15 @@ class KoreSettingsTest {
 
                     // Players being hurt: by falling, the void, lava, fire and burning, drowning, suffocating, magma, campfires,
                     // cactus and berry bushes, poison and wither, and healing again over time. Off, nothing hurts them but /kill.
-                    "damage": true
+                    "damage": true,
+
+                    // The food bar going down as players sprint, swim, jump, mine and are hurt, and starving them once it's empty.
+                    // Off, it stays full.
+                    "hunger": true,
+
+                    // Eating and drinking: food and cake filling the food bar, and what food, potions and milk give, like a golden apple's effects.
+                    // Off, they're only items, and cake only a block.
+                    "food": true
                 },
 
                 // The most blocks a command changes at once: a number, true for the game's own limit, or false for none.
