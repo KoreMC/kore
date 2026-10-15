@@ -6,7 +6,7 @@ plugins {
 
 group = "org.koremc"
 // The release being worked towards, a snapshot until it's out. After each release this moves on to the next one's snapshot.
-version = "0.1.0"
+version = "0.2.0-SNAPSHOT"
 
 repositories {
     mavenCentral()
