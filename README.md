@@ -46,25 +46,6 @@ Kore is not a fork, a wrapper, or a port of an existing server. It's a ground-up
 | Worlds | **LevelDB**, as the game saves worlds, through Hive's [leveldb-mcpe-java](https://github.com/HiveGamesOSS/leveldb-mcpe-java) |
 | Logging | **SLF4J + Logback** |
 
-## 🔌 How a Client Connects
-
-NetherNet splits a connection into two phases: an HTTP signaling handshake over TCP, then a WebRTC peer connection that carries gameplay over UDP.
-
-```mermaid
-sequenceDiagram
-    participant C as Bedrock Client
-    participant K as Kore (TCP :19132)
-
-    C->>K: GET /v1/join
-    K-->>C: 200 OK, server info (JSON)
-    C->>K: POST /v1/join/{networkId}, SDP offer
-    K-->>C: 200 OK, SDP answer
-    Note over C,K: ICE checks, then DTLS and SCTP over UDP
-    C-)K: Game packets over WebRTC data channels
-```
-
-Kore runs ICE-lite and takes the passive DTLS role, so it never initiates anything, and every client shares one UDP port. Game code sees each client as a `NetherNetConnection` that sends and receives whole messages.
-
 ## 🚀 Getting Started
 
 **Requirements:** JDK 25. Gradle downloads a matching toolchain if you don't have one.
@@ -89,18 +70,6 @@ On first run, Kore creates `operator.key`, which signs every SDP answer. Players
 - **Keep it safe.** Anyone holding it can sign answers as your server.
 - **Don't regenerate it.** A new key prompts every returning player again.
 - **Share it across servers** if you run several, so players trust them all at once.
-
-### 🛡️ Authentication
-
-Players sign in through Xbox Live. `online-mode=false` turns this off for local testing; never run it where the public can reach it.
-
-### ⌨️ Operators
-
-No one is an operator to start with. Once you've joined, type this in the console:
-
-```text
-op Steve
-```
 
 ## 🗂️ Project Layout
 
