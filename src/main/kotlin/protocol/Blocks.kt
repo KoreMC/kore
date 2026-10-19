@@ -236,6 +236,10 @@ data class LevelEvent(val event: Int, val position: Vec3, val data: Int) : Serve
         /** The sound of a Totem of Undying saving someone. */
         const val SOUND_TOTEM_USED = 1052
 
+        /** Dust bursting from the ground under someone a mace smashes, and the gust of Wind Burst launching its wielder. */
+        const val PARTICLES_SMASH_GROUND_DUST = 9815
+        const val PARTICLES_WIND_EXPLOSION = 3614
+
         /**
          * Cracks spreading over a block as it's broken. The data is how much
          * of the way they get each tick, out of 65535, and the client carries
@@ -297,6 +301,14 @@ data class LevelSoundEvent(
 
         /** Armour's Thorns pricking whoever hurt its wearer. */
         const val THORNS = "thorns"
+
+        /** A mace smashing someone in the air, or on the ground, from five blocks or less, or more. */
+        const val MACE_SMASH_AIR = "mace.smash_air"
+        const val MACE_SMASH_GROUND = "mace.smash_ground"
+        const val MACE_HEAVY_SMASH_GROUND = "mace.heavy_smash_ground"
+
+        /** A gust of wind bursting, as Wind Burst's does. */
+        const val WIND_CHARGE_BURST = "wind_charge.burst"
     }
 }
 

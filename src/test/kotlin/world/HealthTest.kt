@@ -53,6 +53,13 @@ class HealthTest {
     }
 
     @Test
+    fun `each level of Breach on what struck lets armour keep off 15% less of the blow`() {
+        val iron = set("iron", "iron", "iron", "iron")
+        assertNear(6f, damageAfter(10f, DamageCause.ATTACK, iron, resistance = 0))
+        assertNear(8.4f, damageAfter(10f, DamageCause.ATTACK, iron, resistance = 0, breach = 4))
+    }
+
+    @Test
     fun `Resistance and protection enchantments lessen a blow, but nothing lessens the void`() {
         assertNear(6f, damageAfter(10f, DamageCause.FALL, emptyList(), resistance = 2))
         assertNear(0f, damageAfter(10f, DamageCause.FALL, emptyList(), resistance = 5))

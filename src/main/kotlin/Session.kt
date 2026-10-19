@@ -161,7 +161,9 @@ import org.koremc.protocol.skinFrom
 import org.koremc.protocol.subChunkPayload
 import org.koremc.registry.AIR
 import org.koremc.registry.AIR_NETWORK_ID
+import org.koremc.registry.BREACH
 import org.koremc.registry.BlockState
+import org.koremc.registry.DENSITY
 import org.koremc.registry.EFFICIENCY
 import org.koremc.registry.FIRE_ASPECT
 import org.koremc.registry.FIRE_PROTECTION
@@ -175,6 +177,7 @@ import org.koremc.registry.MENDING
 import org.koremc.registry.RESPIRATION
 import org.koremc.registry.THORNS
 import org.koremc.registry.VANISHING
+import org.koremc.registry.WIND_BURST
 import org.koremc.registry.customName
 import org.koremc.registry.damage
 import org.koremc.registry.levelOf
@@ -202,15 +205,20 @@ import org.koremc.world.CAKE_NUTRITION
 import org.koremc.world.CAKE_SATURATION
 import org.koremc.world.CRAFTER_SLOTS
 import org.koremc.world.CRITICAL_HIT_PARTICLES
+import org.koremc.world.HEAVY_SMASH_FALL
 import org.koremc.world.SHIELD
 import org.koremc.world.SHIELD_COOLDOWN
 import org.koremc.world.SHIELD_DISABLED_TICKS
 import org.koremc.world.SHIELD_RAISE_TICKS
+import org.koremc.world.SMASH_FALL
 import org.koremc.world.THORNS_WEAR
 import org.koremc.world.disablesShields
 import org.koremc.world.shieldCovers
 import org.koremc.world.shieldWear
+import org.koremc.world.smashDamage
+import org.koremc.world.smashesWith
 import org.koremc.world.thornsPrick
+import org.koremc.world.windBurstLift
 import org.koremc.world.Cartographed
 import org.koremc.world.Changes
 import org.koremc.world.ChunkPos
@@ -3488,7 +3496,7 @@ class Session(
      */
     fun hurt(amount: Float, cause: DamageCause, by: Session? = null, weapon: ItemStack? = null): Boolean {
         if (!isInGame || dead || !hurtable) return false
-        val damage = damageAfter(amount, cause, inventory.armour.contents().map { it?.stack }, effects.level(Effect.RESISTANCE))
+        val damage = damageAfter(amount, cause, inventory.armour.contents().map { it?.stack }, effects.level(Effect.RESISTANCE), breach = weapon?.levelOf(BREACH) ?: 0)
         val fresh = !vitals.inGrace
         vitals.hurt(damage) ?: return false
         if (cause.armour) {
@@ -3537,8 +3545,9 @@ class Session(
      * The player hitting another player, [use]'s target, with what they
      * hold, unless combat's switched off, the pvp rule says no, either of
      * them is dead, or the other's out of sight or reach. The hit's as hard
-     * as the weapon, by Strength and Weakness, more for Sharpness, and half
-     * again more if it's critical, struck falling. Everyone around hears it.
+     * as the weapon, by Strength and Weakness, more for Sharpness, more for
+     * how far the player fell if it's a mace's smash, and half again more if
+     * it's critical, struck falling. Everyone around hears it.
      * If it hurts, it knocks the other back, the further for Knockback or a
      * sprint, unless they're still in the grace after their last hurt, and
      * sets them burning for Fire Aspect; the weapon wears, the player tires,
@@ -3554,10 +3563,12 @@ class Session(
         if (shieldRaisedAt != null) shieldRaisedAt = aliveTicks
         val held = heldStack
         val crit = canCrit(held)
+        val fallen = fallDistance.takeIf { canSmash(held) }
         val sharpness = sharpnessDamage(held)
         // A harder hit in the grace after the last hurts by as much harder as it is, but knocks nobody back.
         val fresh = !target.vitals.inGrace
-        val damage = withStrength(attackDamage(held), effects.level(Effect.STRENGTH), effects.level(Effect.WEAKNESS)) + sharpness
+        val damage = withStrength(attackDamage(held), effects.level(Effect.STRENGTH), effects.level(Effect.WEAKNESS)) + sharpness +
+            (fallen?.let { smashDamage(it, held?.levelOf(DENSITY) ?: 0) } ?: 0f)
         if (target.blocks(this, held, if (crit) critical(damage) else damage)) {
             // Fire Aspect sets them burning all the same, and the shield knocks the player back.
             held?.levelOf(FIRE_ASPECT)?.takeIf { it > 0 }?.let { target.setOnFire(it * FIRE_ASPECT_TICKS) }
@@ -3568,8 +3579,9 @@ class Session(
         val hurt = target.hurt(if (crit) critical(damage) else damage, DamageCause.ATTACK, by = this, weapon = held)
         val sound = if (hurt) ATTACK_STRONG else ATTACK_NO_DAMAGE
         showAround(target.feet.toBlockPos(), LevelSoundEvent(sound, target.eyes(), -1, entityType = PLAYER_ENTITY))
-        log.debug("{} hit {} with {}, for {}{}", name, target.name, held?.item?.name ?: "their hand", damage, if (crit) ", critically" else "")
+        log.debug("{} hit {} with {}, for {}{}{}", name, target.name, held?.item?.name ?: "their hand", damage, if (crit) ", critically" else "", fallen?.let { ", smashing from $it blocks" }.orEmpty())
         if (!hurt) return
+        fallen?.let { smash(target, it, held) }
         if (crit) viewers().forEach { it.showHit(target.entityId, Animate.CRITICAL_HIT, CRITICAL_HIT_PARTICLES) }
         if (sharpness > 0) viewers().forEach { it.showHit(target.entityId, Animate.MAGIC_CRITICAL_HIT, ENCHANTED_HIT_PARTICLES) }
         val knockback = (held?.levelOf(KNOCKBACK) ?: 0) + if (sprinting) 1 else 0
@@ -3599,6 +3611,34 @@ class Session(
             if (attacker.hurt(damage, DamageCause.THORNS, by = this) && fresh) attacker.knockBack(feet, extra = 0)
             if (attacker.dead) return
         }
+    }
+
+    /**
+     * Whether a hit the player makes now with [held] smashes: with a mace,
+     * having fallen a block and a half or more, and not slowed by Slow
+     * Falling. Gliding doesn't stop it, as it does in Java.
+     */
+    private fun canSmash(held: ItemStack?) = smashesWith(held?.item?.name) && fallDistance >= SMASH_FALL && !onGround && effects[Effect.SLOW_FALLING] == null
+
+    /**
+     * Lands the player's smash on [target], from a fall of [fallen] blocks,
+     * with [mace]: the fall does them no harm once they land, everyone
+     * around hears it, and the ground bursts into dust if the other stood on
+     * it. Wind Burst on the mace launches the player back up.
+     */
+    private fun smash(target: Session, fallen: Float, mace: ItemStack?) {
+        fallDistance = 0f
+        val sound = when {
+            !target.onGround -> LevelSoundEvent.MACE_SMASH_AIR
+            fallen > HEAVY_SMASH_FALL -> LevelSoundEvent.MACE_HEAVY_SMASH_GROUND
+            else -> LevelSoundEvent.MACE_SMASH_GROUND
+        }
+        showAround(target.feet.toBlockPos(), LevelSoundEvent(sound, target.position, -1))
+        if (target.onGround) showAround(target.feet.toBlockPos(), LevelEvent(LevelEvent.PARTICLES_SMASH_GROUND_DUST, target.feet, 0))
+        val windBurst = mace?.levelOf(WIND_BURST) ?: 0
+        if (windBurst <= 0) return
+        send(SetActorMotion(entityId, Vec3(0f, windBurstLift(windBurst), 0f)))
+        showAround(feet.toBlockPos(), LevelEvent(LevelEvent.PARTICLES_WIND_EXPLOSION, feet, 0), LevelSoundEvent(LevelSoundEvent.WIND_CHARGE_BURST, position, -1))
     }
 
     /**

@@ -90,6 +90,9 @@ const val UNBREAKING = 17
 const val FROST_WALKER = 25
 const val MENDING = 26
 const val VANISHING = 28
+const val WIND_BURST = 38
+const val DENSITY = 39
+const val BREACH = 40
 
 internal const val BOOK = "minecraft:book"
 internal const val ENCHANTED_BOOK = "minecraft:enchanted_book"

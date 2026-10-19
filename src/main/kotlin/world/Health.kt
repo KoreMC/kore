@@ -82,12 +82,13 @@ fun armourOf(item: String): Pair<Int, Int> {
  * [worn], with [resistance] levels of Resistance, as the game works it out:
  * armour takes a twenty-fifth for each of its points, but a hard blow
  * gets through more of it, less so the tougher it is, though it always
- * takes a fifth of what it would; Resistance a fifth for each level; and
+ * takes a fifth of what it would, and 15% less for each level of [breach]
+ * on what struck; Resistance a fifth for each level; and
  * protection enchantments a twenty-fifth for each point of protection,
  * up to twenty: Protection one a level, Fire Protection two against
  * fire, and Feather Falling three against a fall.
  */
-fun damageAfter(amount: Float, cause: DamageCause, worn: List<ItemStack?>, resistance: Int): Float {
+fun damageAfter(amount: Float, cause: DamageCause, worn: List<ItemStack?>, resistance: Int, breach: Int = 0): Float {
     var damage = amount
     val wearing = worn.filterNotNull()
     if (cause.armour) {
@@ -95,7 +96,7 @@ fun damageAfter(amount: Float, cause: DamageCause, worn: List<ItemStack?>, resis
         val points = armour.sumOf { it.first }.toFloat()
         val toughness = armour.sumOf { it.second }.toFloat()
         val blocked = (points - damage / (2 + toughness / 4)).coerceIn(points / 5, MAX_PROTECTION.toFloat())
-        damage *= 1 - blocked / 25
+        damage *= 1 - blocked / 25 * (1 - BREACH_PER_LEVEL * breach).coerceAtLeast(0f)
     }
     if (cause.resisted && resistance > 0) damage *= maxOf(0, 25 - resistance * 5) / 25f
     if (!cause.void) {
@@ -106,6 +107,9 @@ fun damageAfter(amount: Float, cause: DamageCause, worn: List<ItemStack?>, resis
     }
     return damage
 }
+
+/** How much less of a blow each level of Breach on what struck it lets armour keep off. */
+private const val BREACH_PER_LEVEL = 0.15f
 
 /** How many uses a blow of [amount] wears each piece of armour by: one for every four, and at least one. */
 fun armourWear(amount: Float): Int = maxOf(1, floor(amount / 4).toInt())

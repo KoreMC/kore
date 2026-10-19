@@ -105,6 +105,24 @@ class CombatTest {
     }
 
     @Test
+    fun `a mace's smash hurts 4 more a block for 3 blocks, then 2 for 5, then 1, and half more a block a level of Density`() {
+        assertTrue(smashesWith("minecraft:mace"))
+        assertFalse(smashesWith("minecraft:iron_sword"))
+        assertEquals(6f, smashDamage(1.5f, density = 0))
+        assertEquals(12f, smashDamage(3f, density = 0))
+        assertEquals(16f, smashDamage(5f, density = 0))
+        assertEquals(24f, smashDamage(10f, density = 0))
+        assertEquals(34f, smashDamage(10f, density = 2))
+    }
+
+    @Test
+    fun `Wind Burst launches a smasher up faster for each level`() {
+        assertEquals(1.2f, windBurstLift(1))
+        assertEquals(1.75f, windBurstLift(2))
+        assertNear(2.2f, windBurstLift(3))
+    }
+
+    @Test
     fun `each piece of netherite takes a tenth of a hit's knockback`() {
         assertNear(0.2f, knockbackResistance(listOf(item("netherite_helmet"), item("diamond_chestplate"), item("netherite_boots"), null)))
         assertEquals(0f, knockbackResistance(listOf(null, null, null, null)))

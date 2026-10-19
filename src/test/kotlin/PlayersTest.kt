@@ -58,6 +58,7 @@ import org.koremc.registry.ItemStack
 import org.koremc.registry.ItemStacks
 import org.koremc.registry.ItemVersion
 import org.koremc.registry.THORNS
+import org.koremc.registry.WIND_BURST
 import org.koremc.registry.damage
 import org.koremc.registry.withCustomName
 import org.koremc.registry.withDamage
@@ -92,6 +93,10 @@ private const val SNEAKING = 8
 /** The network IDs of the diamond sword and iron axe the tests hit with. */
 private const val SWORD = 4
 private const val AXE = 5
+private const val MACE = 6
+
+/** The input flag set on the tick a player lands. */
+private const val VERTICAL_COLLISION = 50
 
 class PlayersTest {
     private val authority = TestAuthority()
@@ -107,12 +112,13 @@ class PlayersTest {
     private val shield = ItemDefinition("minecraft:shield", 3, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 336)
     private val sword = ItemDefinition("minecraft:diamond_sword", SWORD, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 1561)
     private val axe = ItemDefinition("minecraft:iron_axe", AXE, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 250)
+    private val mace = ItemDefinition("minecraft:mace", MACE, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 501)
 
     /** What every player had when they last left, or null for players new to the world. */
     private var saved: NbtMap? = null
     private val game = GameData(
         world, emptyList(), org.koremc.protocol.BlockDefinitions(emptyList()), creative, emptyMap(), Drops(emptyList(), creative, palette),
-        items = ItemStacks(listOf(helmet, chestplate, shield, sword, axe), creative, palette),
+        items = ItemStacks(listOf(helmet, chestplate, shield, sword, axe, mace), creative, palette),
         players = object : PlayerSaves {
             override fun load(player: UUID) = saved
 
@@ -376,6 +382,29 @@ class PlayersTest {
         steve.attacks(2)
         assertTrue(steve.session.dead)
         assertTrue(steve.received().any { it.contentEquals(DeathInfo("death.attack.thorns", listOf("Steve", "Alex")).encode()) })
+    }
+
+    @Test
+    fun `a mace's hit from a fall smashes, harder for the fall, which then does the wielder no harm, and Wind Burst launches them back up`() {
+        val steve = Client(1, "Steve", "1111")
+        val alex = Client(2, "Alex", "2222")
+        alex.moves(Vec3(2.5f, -61.38f, 0.5f))
+        tick()
+        steve.session.give(ItemStack(mace).withEnchantments(listOf(EnchantmentLevel(WIND_BURST, 1))))
+
+        // Six blocks down, Steve smashes Alex in the air for 6, 18 more for the fall, and half again, critically.
+        steve.moves(Vec3(0.5f, -55.38f, 0.5f))
+        steve.moves(Vec3(0.5f, -61.38f, 0.5f))
+        steve.received()
+        steve.attacks(2, held = MACE)
+        assertTrue(alex.session.dead)
+        val got = steve.received()
+        assertTrue(got.any { it.contentEquals(LevelSoundEvent(LevelSoundEvent.MACE_SMASH_AIR, alex.session.position, -1).encode()) })
+        assertTrue(got.any { it.contentEquals(SetActorMotion(1, Vec3(0f, 1.2f, 0f)).encode()) })
+
+        // Landing, the six blocks he fell do him no harm.
+        steve.moves(Vec3(0.5f, -61.38f, 0.5f), inputs = listOf(VERTICAL_COLLISION))
+        assertEquals(20f, steve.session.vitals.health)
     }
 
     @Test

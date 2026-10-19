@@ -83,6 +83,13 @@ private const val THORNS_MOST = 5f
 /** How much more a piece of armour wears for each prick of its Thorns. */
 const val THORNS_WEAR = 2
 
+/** The least a fall must be, in blocks, for a mace's hit to smash, and the most for it to land lightly, as its sound has it. */
+const val SMASH_FALL = 1.5f
+const val HEAVY_SMASH_FALL = 5f
+
+/** How much more each level of Density makes a smash hurt for each block fallen. */
+private const val DENSITY_PER_BLOCK = 0.5f
+
 /** How hard [held], or a bare hand, hits, before effects and enchantments. */
 fun attackDamage(held: ItemStack?): Float = held?.let { WEAPON_DAMAGE[it.item.name] } ?: HAND_DAMAGE
 
@@ -142,6 +149,30 @@ fun shieldCovers(blocker: Vec3, yaw: Float, from: Vec3): Boolean {
 fun thornsPrick(level: Int, random: Random = Random): Float? {
     if (level <= 0 || random.nextFloat() >= THORNS_CHANCE_PER_LEVEL * level) return null
     return THORNS_LEAST + random.nextFloat() * (THORNS_MOST - THORNS_LEAST)
+}
+
+/** Whether a hit with [item] smashes, struck from a fall: a mace's does. */
+fun smashesWith(item: String?) = item == "minecraft:mace"
+
+/**
+ * How much more a mace's smash hurts for a fall of [fallen] blocks: 4 a
+ * block for the first 3, 2 a block for the next 5, and 1 a block after
+ * that, and half a point a block more for each level of [density].
+ */
+fun smashDamage(fallen: Float, density: Int): Float {
+    val bonus = when {
+        fallen <= 3f -> 4 * fallen
+        fallen <= 8f -> 12 + 2 * (fallen - 3)
+        else -> 22 + (fallen - 8)
+    }
+    return bonus + DENSITY_PER_BLOCK * density * fallen
+}
+
+/** How fast Wind Burst at [level] launches a player up after a smash, in blocks a tick: about seven blocks high at the first level. */
+fun windBurstLift(level: Int): Float = when (level) {
+    1 -> 1.2f
+    2 -> 1.75f
+    else -> 1.15f + 0.35f * level
 }
 
 /** How much of a hit's knockback a player wearing [armour] shakes off, from 0 to 1. */
