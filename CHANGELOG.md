@@ -14,6 +14,7 @@ Each release, newest first, with the client version it's for. What's done since 
 - Players join and respawn facing south, looking straight ahead
 - Kore's own settings are in `kore.jsonc`, so editors take the comments in it. A `kore.json` from 0.1.0 is renamed to it
 - Armour worn by a hurt, and items Mending repairs, show their new durability at once, not once they're moved
+- What `/clear` or a used-up totem takes from the offhand goes from it, rather than seeming to stay
 
 ## 0.1.0
 

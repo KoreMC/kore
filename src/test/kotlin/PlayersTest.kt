@@ -18,6 +18,7 @@ import org.koremc.protocol.DeathInfo
 import org.koremc.protocol.Disconnect
 import org.koremc.protocol.FloatItem
 import org.koremc.protocol.GameMode
+import org.koremc.protocol.InventoryContent
 import org.koremc.protocol.InventorySlot
 import org.koremc.protocol.LevelSoundEvent
 import org.koremc.protocol.MovePlayer
@@ -491,6 +492,16 @@ class PlayersTest {
             listOf(ShowEquipment(2, null, 0).encode().toList(), ShowArmour(2, listOf(ItemStack(helmet), ItemStack(chestplate), null, null)).encode().toList()),
             steve.received().map { it.toList() },
         )
+    }
+
+    @Test
+    fun `clearing the offhand tells the client all of it, which it takes notice of, as it may not of the one slot`() {
+        saved = NbtMap.builder().putList("Offhand", NbtType.COMPOUND, listOf(ItemStacks.nbtOf(ItemStack(shield), 0))).build()
+        val steve = Client(1, "Steve", "1111")
+        steve.received()
+
+        assertEquals(1, steve.session.clearItems(-1) { true })
+        assertTrue(steve.received().any { it.contentEquals(InventoryContent(OFFHAND_WINDOW, listOf(null)).encode()) })
     }
 
     /** A stack of one of the item [id], as the client describes what it holds, the first stack it was given, or nothing for 0. */

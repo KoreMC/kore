@@ -3186,11 +3186,20 @@ class Session(
      * The client takes no notice of a stack it has changing under the ID it
      * already knows it by.
      */
-    private fun replaceSlot(container: Container, slot: Int, window: Int, stack: ItemStack?): InventorySlot {
+    private fun replaceSlot(container: Container, slot: Int, window: Int, stack: ItemStack?): ServerPacket {
         val replaced = stack?.let { SlotStack(it, inventory.newStackId()) }
         container[slot] = replaced
-        return InventorySlot(slot, stack, replaced?.id ?: 0, window)
+        return slotPacket(slot, replaced, window)
     }
+
+    /**
+     * What tells the client [slot] of its [window] holds [there] now: that
+     * slot, but for the offhand, all of it, as the game's own server sends
+     * it, since the client can take no notice of the offhand's one slot.
+     */
+    private fun slotPacket(slot: Int, there: SlotStack?, window: Int): ServerPacket =
+        if (window == OFFHAND_WINDOW) InventoryContent(OFFHAND_WINDOW, listOf(there?.let { it.stack to it.id }))
+        else InventorySlot(slot, there?.stack, there?.id ?: 0, window)
 
     /** The slot of the player's items numbered [slot], as it is now, for the client. */
     private fun slotOf(slot: Int) = inventory.items[slot].let { InventorySlot(slot, it?.stack, it?.id ?: 0) }
@@ -3508,7 +3517,7 @@ class Session(
         val (container, slot, window) = listOf(Triple(inventory.offhand, 0, OFFHAND_WINDOW), Triple(inventory.items, heldSlot, INVENTORY_WINDOW))
             .firstOrNull { (container, slot) -> container[slot]?.stack?.item?.name == TOTEM } ?: return false
         container[slot] = null
-        send(InventorySlot(slot, null, 0, window))
+        send(slotPacket(slot, null, window))
         vitals.health = 1f
         takeEffects()
         for ((effect, ticks) in TOTEM_EFFECTS) giveEffect(effect, ticks, ambient = false)
@@ -4076,7 +4085,7 @@ class Session(
      */
     fun clearItems(maxCount: Int, matching: (ItemStack) -> Boolean): Int {
         var found = 0
-        val changed = mutableListOf<InventorySlot>()
+        val changed = mutableListOf<ServerPacket>()
         for ((container, window) in listOf(inventory.items to INVENTORY_WINDOW, inventory.offhand to OFFHAND_WINDOW, inventory.armour to ARMOUR_WINDOW)) {
             for (slot in 0 until container.size) {
                 val there = container[slot]?.takeIf { matching(it.stack) } ?: continue
@@ -4088,7 +4097,7 @@ class Session(
                 if (taking == 0) continue
                 container[slot] = if (taking < there.stack.count) there.copy(stack = there.stack.copy(count = there.stack.count - taking)) else null
                 found += taking
-                changed += InventorySlot(slot, container[slot]?.stack, container[slot]?.id ?: 0, window)
+                changed += slotPacket(slot, container[slot], window)
             }
         }
         if (changed.isNotEmpty()) send(*changed.toTypedArray())
