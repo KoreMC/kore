@@ -27,6 +27,10 @@ private const val ENDER_PEARL_GRAVITY = 0.025
 private const val ARROW_GRAVITY = 0.05
 private const val TRIDENT_GRAVITY = 0.1
 
+/** How wide and tall a projectile is, and a trident, taller. */
+private const val PROJECTILE_SIZE = 0.25f
+private const val TRIDENT_HEIGHT = 0.35f
+
 /** How far below its thrower's eyes a snowball or an arrow leaves their hand. */
 private const val EYE_DROP = 0.1f
 
@@ -72,30 +76,36 @@ val CLIMATE_VARIANTS = listOf("temperate", "warm", "cold")
 
 /**
  * What flies: the item it's thrown from, if it's thrown, and the entity it
- * flies as, as the game names them, as the game's own entities have them:
- * how much faster it falls each tick, how much of its speed the air takes,
- * how far below its thrower's eyes it leaves them, the wait before its
- * thrower can throw another, if there is one, an egg's climate variant, by
- * its place in [CLIMATE_VARIANTS], and whether it sticks in a block it
- * hits, as an arrow does, rather than breaking.
+ * flies as, as the game names them, and what the entity's called, as the
+ * game's own entities have them: how much faster it falls each tick, how
+ * much of its speed the air takes, how far below its thrower's eyes it
+ * leaves them, the wait before its thrower can throw another, if there is
+ * one, an egg's climate variant, by its place in [CLIMATE_VARIANTS],
+ * whether it sticks in a block it hits, as an arrow does, rather than
+ * breaking, and how wide and tall it is.
  */
 enum class ProjectileKind(
     val item: String?,
     val entity: String,
+    val title: String,
     val gravity: Double = GRAVITY,
     val drag: Double = DRAG,
     val drop: Float = 0f,
     val cooldown: ItemCooldown? = null,
     val climate: Int? = null,
     val sticks: Boolean = false,
+    val width: Float = PROJECTILE_SIZE,
+    val height: Float = PROJECTILE_SIZE,
 ) {
-    SNOWBALL("minecraft:snowball", "minecraft:snowball", drop = EYE_DROP),
-    EGG("minecraft:egg", EGG_ENTITY, climate = 0),
-    BROWN_EGG("minecraft:brown_egg", EGG_ENTITY, climate = 1),
-    BLUE_EGG("minecraft:blue_egg", EGG_ENTITY, climate = 2),
-    ENDER_PEARL("minecraft:ender_pearl", "minecraft:ender_pearl", ENDER_PEARL_GRAVITY, drag = 0.0, cooldown = ItemCooldown("ender_pearl", ENDER_PEARL_COOLDOWN)),
-    ARROW(null, "minecraft:arrow", ARROW_GRAVITY, drop = EYE_DROP, sticks = true),
-    TRIDENT(null, "minecraft:thrown_trident", TRIDENT_GRAVITY, drop = EYE_DROP, sticks = true),
+    SNOWBALL("minecraft:snowball", "minecraft:snowball", "Snowball", drop = EYE_DROP),
+    EGG("minecraft:egg", EGG_ENTITY, "Egg", climate = 0),
+    BROWN_EGG("minecraft:brown_egg", EGG_ENTITY, "Egg", climate = 1),
+    BLUE_EGG("minecraft:blue_egg", EGG_ENTITY, "Egg", climate = 2),
+    ENDER_PEARL(
+        "minecraft:ender_pearl", "minecraft:ender_pearl", "Ender Pearl", ENDER_PEARL_GRAVITY, drag = 0.0, cooldown = ItemCooldown("ender_pearl", ENDER_PEARL_COOLDOWN),
+    ),
+    ARROW(null, "minecraft:arrow", "Arrow", ARROW_GRAVITY, drop = EYE_DROP, sticks = true),
+    TRIDENT(null, "minecraft:thrown_trident", "Trident", TRIDENT_GRAVITY, drop = EYE_DROP, sticks = true, height = TRIDENT_HEIGHT),
     ;
 
     /** Whether it's an egg, of any colour. */
@@ -172,6 +182,11 @@ class Projectile(
     var moved = false
         private set
 
+    /** Whether a command moved it since the last tick, and whether one had by this tick, which those who see it see it jump to. */
+    private var jumped = false
+    var snapped = false
+        private set
+
     /** Those a piercing arrow's passed through, which it doesn't hit again. */
     val pierced = mutableSetOf<Long>()
 
@@ -208,9 +223,9 @@ class Projectile(
         moved = true
     }
 
-    /** Leaves it where it's stuck another tick. Returns how long it's been stuck. */
+    /** Leaves it where it's stuck another tick, or where a command moved it. Returns how long it's been stuck. */
     internal fun stayStuck(): Int {
-        moved = false
+        moved = snapped
         return ++stuckFor
     }
 
@@ -218,6 +233,17 @@ class Projectile(
     internal fun unstick() {
         stuckIn = null
         stuckFor = 0
+    }
+
+    /**
+     * Puts it [at] a point, as a command does, and nothing else: one that's
+     * flying flies on from there, and one that's landed stays landed, for
+     * whoever's there to pick up at once, until the block it was stuck in
+     * goes.
+     */
+    fun teleport(at: Vec3) {
+        position = at
+        jumped = true
     }
 
     /** Bounces it back off someone it didn't hurt, slower. */
@@ -252,6 +278,8 @@ class Projectile(
     /** Starts a tick, forgetting what happened in the last. */
     internal fun startTick() {
         setOffBack = false
+        snapped = jumped
+        jumped = false
     }
 }
 

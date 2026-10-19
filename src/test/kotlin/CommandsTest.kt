@@ -61,10 +61,13 @@ import org.koremc.registry.ItemStacks
 import org.koremc.registry.ItemVersion
 import org.koremc.registry.damage
 import org.koremc.registry.enchantments
+import org.koremc.world.ArrowShot
 import org.koremc.world.BlockPos
 import org.koremc.world.Drops
 import org.koremc.world.FlatWorld
+import org.koremc.world.ProjectileKind
 import org.koremc.world.Vec3
+import org.koremc.world.tickProjectiles
 import java.security.interfaces.ECPublicKey
 import java.util.UUID
 import kotlin.io.path.createTempDirectory
@@ -588,6 +591,30 @@ class CommandsTest {
         steve.runs("/gamemode c")
         steve.runs("/kill")
         assertEquals(listOf(CommandMessage("commands.kill.attemptKillPlayerCreative", false)), steve.output())
+    }
+
+    @Test
+    fun `selectors pick out projectiles by their kind, which all teleport at once, a landed arrow picked up there, and can be killed`() {
+        val (steve, alex) = steveAndAlex()
+        val spared = ArrowShot(2f, returned = false)
+        val flying = world.spawnProjectile(ProjectileKind.ARROW, thrower = 1, Vec3(0.5f, -50f, 0.5f), Vec3(0f, 0f, 1f), spared)
+        val landed = world.spawnProjectile(ProjectileKind.ARROW, thrower = 1, Vec3(4.5f, -62.5f, 0.5f), Vec3(0f, -1f, 0f), spared)
+        repeat(10) { world.tickProjectiles(emptyMap()) }
+        assertTrue(landed.stuckIn != null && flying.stuckIn == null)
+        world.spawnProjectile(ProjectileKind.SNOWBALL, thrower = 1, Vec3(8.5f, -50f, 0.5f), Vec3(0f, 0f, 1f))
+
+        steve.runs("/tp @e[type=arrow] Alex")
+        assertEquals(listOf(CommandMessage("commands.tp.success", true, listOf("Arrow, Arrow", "Alex"))), steve.output())
+        assertEquals(alex.session.feet, landed.position)
+        assertTrue(landed.stuckIn != null, "it stays landed")
+        world.tickProjectiles(emptyMap())
+        assertTrue(landed.snapped && landed.moved, "it's seen to jump there")
+        alex.session.collectProjectiles()
+        assertTrue(landed !in world.projectiles, "Alex picks it up at once")
+
+        steve.runs("/kill @e[type=arrow]")
+        assertEquals(listOf(CommandMessage("commands.kill.successful", true, listOf("Arrow"))), steve.output())
+        assertEquals(listOf(ProjectileKind.SNOWBALL), world.projectiles.map { it.kind })
     }
 
     @Test

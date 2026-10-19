@@ -395,6 +395,7 @@ class Commands(
     private fun CommandCall.teleport(victims: List<Selectable>, to: Vec3, turn: Turn = Turn { player, _ -> player.yaw to player.pitch }) {
         if (abs(to.x) > WORLD_EDGE || abs(to.z) > WORLD_EDGE) fail("commands.tp.outOfWorld")
         val coordinates = listOf(to.x, to.y, to.z).map { String.format(Locale.ROOT, "%.2f", it) }
+        val moved = mutableListOf<String>()
         for (victim in victims) {
             if (!fits(victim, to)) {
                 error("commands.tp.safeTeleportFail", victim.name, coordinates.joinToString(", "))
@@ -404,11 +405,13 @@ class Commands(
                 is Session -> turn.of(victim, to).let { (yaw, pitch) -> victim.teleport(to, yaw, pitch) }
                 is WorldEntity -> victim.teleport(to)
             }
-            success("commands.tp.success.coordinates", victim.name, coordinates[0], coordinates[1], coordinates[2])
+            moved += victim.name
         }
+        if (moved.isNotEmpty()) success("commands.tp.success.coordinates", moved.joinToString(", "), coordinates[0], coordinates[1], coordinates[2])
     }
 
     private fun CommandCall.teleportTo(victims: List<Selectable>, destination: Selectable) {
+        val moved = mutableListOf<String>()
         for (victim in victims) {
             if (!fits(victim, destination.feet)) {
                 error("commands.tp.safeTeleportFail", victim.name, destination.name)
@@ -418,8 +421,9 @@ class Commands(
                 is Session -> victim.teleport(destination.feet, victim.yaw, victim.pitch)
                 is WorldEntity -> victim.teleport(destination.feet)
             }
-            success("commands.tp.success", victim.name, destination.name)
+            moved += victim.name
         }
+        if (moved.isNotEmpty()) success("commands.tp.success", moved.joinToString(", "), destination.name)
     }
 
     /** Whether [victim] fits at [feet], or the command doesn't care. */
@@ -1157,13 +1161,16 @@ class Commands(
 
     /**
      * Everything commands can pick out: the players in the game, and the
-     * items, experience orbs and falling blocks in the world.
+     * items, experience orbs, falling blocks and projectiles in the world.
      */
     private val entities: List<Selectable>
         get() = players +
-            world.items.map { WorldEntity(ITEM_TYPE, it.stack.item.displayName, it.position, ITEM_SIZE, it::teleport) { world.removeItem(it.id) } } +
-            world.orbs.map { WorldEntity(ORB_TYPE, ORB_NAME, it.position, ITEM_SIZE, it::teleport) { world.removeOrb(it.id) } } +
-            world.fallingBlocks.map { WorldEntity(FALLING_BLOCK_TYPE, FALLING_BLOCK_NAME, it.position, FALLING_BLOCK_SIZE, it::teleport) { world.removeFallingBlock(it.id) } }
+            world.items.map { WorldEntity(ITEM_TYPE, it.stack.item.displayName, it.position, ITEM_SIZE, ITEM_SIZE, it::teleport) { world.removeItem(it.id) } } +
+            world.orbs.map { WorldEntity(ORB_TYPE, ORB_NAME, it.position, ITEM_SIZE, ITEM_SIZE, it::teleport) { world.removeOrb(it.id) } } +
+            world.fallingBlocks.map {
+                WorldEntity(FALLING_BLOCK_TYPE, FALLING_BLOCK_NAME, it.position, FALLING_BLOCK_SIZE, FALLING_BLOCK_SIZE, it::teleport) { world.removeFallingBlock(it.id) }
+            } +
+            world.projectiles.map { WorldEntity(it.kind.entity, it.kind.title, it.position, it.kind.width, it.kind.height, it::teleport) { world.removeProjectile(it.id) } }
 
     /** [message] with each selector in it, like `@a`, written out as the names of what it means. */
     private fun CommandCall.expand(message: String): String = message.split(' ').joinToString(" ") { word ->
@@ -1183,19 +1190,19 @@ class Commands(
 /**
  * Something in the world besides a player that commands can pick out, by
  * the game's name for its kind, and what it's called, which for an item is
- * the item's name, which [teleport] moves and [remove] takes away.
+ * the item's name, as wide and tall as it is, which [teleport] moves and
+ * [remove] takes away.
  */
 private class WorldEntity(
     override val type: String,
     override val name: String,
     override val feet: Vec3,
-    size: Float,
+    override val width: Float,
+    override val height: Float,
     val teleport: (Vec3) -> Unit,
     val remove: () -> Unit,
 ) : Selectable {
     override val yaw get() = 0f
     override val pitch get() = 0f
-    override val width = size
-    override val height = size
     override val gameMode: GameMode? get() = null
 }

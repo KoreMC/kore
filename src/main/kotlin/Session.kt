@@ -3381,7 +3381,7 @@ class Session(
             }
             if (!projectile.moved) continue
             val landed = projectile.stuckIn != null
-            packets += MoveActorAbsolute(projectile.id, projectile.position, onGround = false, teleport = landed, pitch = projectile.pitch, yaw = projectile.yaw)
+            packets += MoveActorAbsolute(projectile.id, projectile.position, onGround = false, teleport = landed || projectile.snapped, pitch = projectile.pitch, yaw = projectile.yaw)
             // An arrow that's landed trails no sparks, and a trident setting off back shows it.
             if ((landed && projectile.arrow?.critical == true) || projectile.setOffBack) {
                 packets += SetActorData(projectile.id, listOf(flagsItem(setOf(ActorFlag.HAS_GRAVITY, ActorFlag.CAN_CLIMB) + flagsOf(projectile))))
