@@ -7,6 +7,7 @@ Each release, newest first, with the client version it's for. What's done since 
 - Players fight each other: hits hurt by the weapon, with Sharpness, Strength and Weakness, critical hits, knockback and Fire Aspect.
   The pvp game rule and a `combat` switch in `kore.json` turn it off
 - A Totem of Undying in either hand saves a player from dying, but in the void
+- The console no longer shows players dying or respawning, only what they say and the commands they run
 
 ## 0.1.0
 

@@ -735,7 +735,6 @@ class CommandsTest {
         assertEquals("§2--- Showing help page 1 of 4 (/help <page>) ---", english(CommandMessage("§2%commands.help.header", true, listOf("1", "4"))))
         assertEquals("§eSets a player's game mode.", english(CommandMessage("§e%commands.gamemode.description", true)))
         assertEquals("Gave Speed * 2 to Alex for 10 seconds", english(CommandMessage("commands.effect.success", true, listOf("%potion.moveSpeed", "2", "Alex", "10"))))
-        assertEquals("Steve hit the ground too hard", english("death.attack.fall", listOf("Steve")))
     }
 
     private fun idOf(packet: ByteArray) = Unpooled.wrappedBuffer(packet).readVarUInt() and 0x3FF

@@ -95,7 +95,7 @@ class KoreSettingsTest {
                 },
 
                 // What the console and log file keep. Off, what players say, or the commands they run, aren't logged at all,
-                // to keep the logs short. How players die is logged as the showdeathmessages game rule says.
+                // to keep the logs short.
                 "logs": {
                     // Detail for working out what went wrong, DBG, in the console too, but for every packet. The log file always has it.
                     "debug": false,

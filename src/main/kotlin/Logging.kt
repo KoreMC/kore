@@ -11,19 +11,17 @@ import org.slf4j.LoggerFactory
 /** The logger for every packet batch in and out, which only the log file keeps. */
 const val PACKET_LOG = "org.koremc.packets"
 
-// The loggers for what players say, the commands they run, and how they die, which the log tags apart from the rest.
+// The loggers for what players say and the commands they run, which the log tags apart from the rest.
 private const val CHAT = "Chat"
 private const val COMMANDS = "Commands"
-private const val DEATHS = "Deaths"
 
 val chatLog: Logger = LoggerFactory.getLogger(CHAT)
 val commandLog: Logger = LoggerFactory.getLogger(COMMANDS)
-val deathLog: Logger = LoggerFactory.getLogger(DEATHS)
 
 /** Each tag's colour in the console, as a terminal's colour code: the time is grey, highlighted words yellow, and the rest the terminal's own. */
 private val TAG_COLOURS = mapOf(
     "INF" to "94", "WRN" to "93", "ERR" to "1;91", "DBG" to "90",
-    "CHT" to "92", "CMD" to "95", "DTH" to "31",
+    "CHT" to "92", "CMD" to "95",
 )
 private const val GREY = "90"
 private const val YELLOW = "93"
@@ -58,15 +56,14 @@ private const val RESET = "0"
 
 /**
  * What a line of the log is, in three letters: an error, a warning, what a
- * player said, a command they ran, how they died, anything else that
- * happened, or detail for finding out what went wrong.
+ * player said, a command they ran, anything else that happened, or detail
+ * for finding out what went wrong.
  */
 fun tagOf(event: ILoggingEvent): String = when {
     event.level.isGreaterOrEqual(Level.ERROR) -> "ERR"
     event.level == Level.WARN -> "WRN"
     event.loggerName == CHAT -> "CHT"
     event.loggerName == COMMANDS -> "CMD"
-    event.loggerName == DEATHS -> "DTH"
     event.level == Level.INFO -> "INF"
     else -> "DBG"
 }

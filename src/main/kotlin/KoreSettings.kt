@@ -78,7 +78,7 @@ private val COMMENTS = mapOf(
     "commandLimits.fill" to "The most blocks /fill fills. The game's own limit is 32768.",
     "commandLimits.clone" to "The most blocks /clone copies. The game's own limit is 655360.",
     "logs" to "What the console and log file keep. Off, what players say, or the commands they run, aren't logged at all,\n" +
-        "to keep the logs short. How players die is logged as the showdeathmessages game rule says.",
+        "to keep the logs short.",
     "logs.debug" to "Detail for working out what went wrong, DBG, in the console too, but for every packet. The log file always has it.",
     "logs.chat" to "What players say in the chat, CHT.",
     "logs.commands" to "The commands players run, CMD.",

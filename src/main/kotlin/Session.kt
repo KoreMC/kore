@@ -7,7 +7,6 @@ import org.koremc.command.Commands
 import org.koremc.command.ConsoleSource
 import org.koremc.command.Operators
 import org.koremc.command.Selectable
-import org.koremc.command.english
 import org.koremc.command.logOutput
 import org.koremc.inventory.CURSOR_SLOT
 import org.koremc.inventory.Container
@@ -3833,7 +3832,7 @@ class Session(
         effectsEnded(ended)
         send(DeathInfo(message, parameters), Respawn(spawnEyes(), Respawn.SEARCHING_FOR_SPAWN, entityId))
         schedule(DEAD_BODY_TICKS) { if (dead) bodyGone = true }
-        if (world.rules.showDeathMessages) deathLog.info(english(message, parameters)) else log.debug("{} died: {}", name, message)
+        log.debug("{} died: {}", name, message)
     }
 
     /** Shows the client the player [entityId] dying, if it's its own player or one it can see. */
@@ -3902,7 +3901,7 @@ class Session(
         // away and showing them afresh instead, so soon after, loses their skin on some clients, which show them as Steve.
         val look = look()
         viewers().forEach { it.showAlive(entityId, look) }
-        log.info("{} respawned", name)
+        log.debug("{} respawned", name)
     }
 
     /**

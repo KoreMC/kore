@@ -323,23 +323,6 @@ private val ENGLISH = mapOf(
     "effect.weaving" to "Weaving",
     "effect.oozing" to "Oozing",
     "effect.infested" to "Infested",
-    "death.attack.generic" to "%1\$s died",
-    "death.attack.fall" to "%1\$s hit the ground too hard",
-    "death.attack.outOfWorld" to "%1\$s fell out of the world",
-    "death.attack.lava" to "%1\$s tried to swim in lava",
-    "death.attack.inFire" to "%1\$s went up in flames",
-    "death.attack.onFire" to "%1\$s burned to death",
-    "death.attack.magma" to "%1\$s discovered the floor was lava",
-    "death.attack.cactus" to "%1\$s was pricked to death",
-    "death.attack.sweetBerry" to "%1\$s was poked to death by a sweet berry bush",
-    "death.attack.inWall" to "%1\$s suffocated in a wall",
-    "death.attack.drown" to "%1\$s drowned",
-    "death.attack.lightningBolt" to "%1\$s was struck by lightning",
-    "death.attack.magic" to "%1\$s was killed by magic",
-    "death.attack.wither" to "%1\$s withered away",
-    "death.attack.starve" to "%1\$s starved to death",
-    "death.attack.player" to "%1\$s was slain by %2\$s",
-    "death.attack.player.item" to "%1\$s was slain by %2\$s using %3\$s",
 )
 
 /** A parameter in a message, numbered or in turn, as a string or a number. */
@@ -356,7 +339,7 @@ private val COLOURED_KEY = Regex("""((?:§.)*)%?(.*)""")
 fun english(message: CommandMessage): String = english(message.message, message.parameters)
 
 /** [message], a key of the game's or text, in English, with [parameters] filled in, as [english] does a command's. */
-fun english(message: String, parameters: List<String>): String {
+private fun english(message: String, parameters: List<String>): String {
     val (colours, key) = COLOURED_KEY.matchEntire(message)!!.destructured
     val template = ENGLISH[key] ?: return message
     var next = 0

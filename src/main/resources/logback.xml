@@ -2,7 +2,7 @@
     <!-- Names each run's log file after the moment the server started. -->
     <timestamp key="started" datePattern="yyyy-MM-dd_HH-mm-ss"/>
 
-    <!-- Each line's tag, INF, WRN, ERR, DBG, CHT, CMD or DTH, and its colour, the grey of its time, and words in backticks highlighted. -->
+    <!-- Each line's tag, INF, WRN, ERR, DBG, CHT or CMD, and its colour, the grey of its time, and words in backticks highlighted. -->
     <conversionRule conversionWord="tag" converterClass="org.koremc.TagConverter"/>
     <conversionRule conversionWord="colouredTag" converterClass="org.koremc.ColouredTagConverter"/>
     <conversionRule conversionWord="grey" converterClass="org.koremc.GreyConverter"/>

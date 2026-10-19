@@ -20,7 +20,6 @@ class LoggingTest {
         assertEquals("DBG", tagOf(event("org.koremc.Session", Level.DEBUG)))
         assertEquals("CHT", tagOf(event("Chat")))
         assertEquals("CMD", tagOf(event("Commands")))
-        assertEquals("DTH", tagOf(event("Deaths")))
         assertEquals("\u001B[95mCMD\u001B[0m", ColouredTagConverter().convert(event("Commands")))
     }
 
@@ -36,9 +35,9 @@ class LoggingTest {
 
     @Test
     fun `the game's colours are drawn in the console as they look in the game, and left out of the file`() {
-        val slain = event("Deaths", message = "Alex was slain by Steve using §r§dThe Super Swatter§r")
-        assertEquals("Alex was slain by Steve using \u001B[0m\u001B[38;2;255;85;255mThe Super Swatter\u001B[0m\u001B[0m", HighlightedMessageConverter().convert(slain))
-        assertEquals("Alex was slain by Steve using The Super Swatter", PlainMessageConverter().convert(slain))
+        val said = event("Chat", message = "Steve said look at my §r§dSuper Swatter§r")
+        assertEquals("Steve said look at my \u001B[0m\u001B[38;2;255;85;255mSuper Swatter\u001B[0m\u001B[0m", HighlightedMessageConverter().convert(said))
+        assertEquals("Steve said look at my Super Swatter", PlainMessageConverter().convert(said))
         // Bedrock's own: §m is redstone's colour, not strikethrough. Bold and italic are as they are, and scrambled text is plain.
         assertEquals("\u001B[38;2;151;22;7m\u001B[1mred\u001B[0m", gameColoured("§m§lred"))
         assertEquals("\u001B[3mleaning\u001B[0m and plain\u001B[0m", gameColoured("§oleaning§r and §kplain"))
