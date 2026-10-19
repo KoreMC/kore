@@ -4,10 +4,10 @@ import kotlinx.serialization.Serializable
 
 /**
  * The game's systems Kore runs, each of which a server can switch off in
- * kore.json to go without it: all on, the game as it is, and all off, blocks
- * that are only blocks. A system switched off doesn't run at all, and the
- * blocks that are part of it do nothing. What the game's own rules already
- * switch off, like the weather or blocks' drops, the game rules do.
+ * kore.jsonc to go without it: all on, the game as it is, and all off,
+ * blocks that are only blocks. A system switched off doesn't run at all,
+ * and the blocks that are part of it do nothing. What the game's own rules
+ * already switch off, like the weather or blocks' drops, the game rules do.
  */
 @Serializable
 data class Features(
@@ -52,7 +52,7 @@ data class Features(
      */
     val combat: Boolean = true,
 ) {
-    /** The names of the systems switched off, as kore.json names them. */
+    /** The names of the systems switched off, as kore.jsonc names them. */
     val off: List<String>
         get() = listOfNotNull(
             "redstone".takeUnless { redstone }, "liquids".takeUnless { liquids }, "fallingBlocks".takeUnless { fallingBlocks },

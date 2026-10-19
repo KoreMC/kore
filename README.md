@@ -66,7 +66,7 @@ Kore uses port `19132` for signaling (TCP) and gameplay (UDP), so open both in y
 
 ### ⚙️ Configuration
 
-Settings live in `server.properties`, as the dedicated server names them, and Kore's own in `kore.json`. Both are written on first run, each setting explained. Behind NAT, set `advertisedAddresses` in `kore.json` to your public IP.
+Settings live in `server.properties`, as the dedicated server names them, and Kore's own in `kore.jsonc`. Both are written on first run, each setting explained. Behind NAT, set `advertisedAddresses` in `kore.jsonc` to your public IP.
 
 ### 🔑 The Operator Key
 

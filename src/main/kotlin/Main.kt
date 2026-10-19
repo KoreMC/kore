@@ -59,7 +59,8 @@ fun main() {
     val kore = listOfNotNull("Kore", Sessions::class.java.`package`?.implementationVersion).joinToString(" ")
     log.info("Starting {} for Minecraft {}", kore, ServerConfig().version)
     val config = try {
-        loadServerConfig(SERVER_PROPERTIES).withKoreSettings(KORE_JSON)
+        renameOldKoreSettings(OLD_KORE_SETTINGS, KORE_SETTINGS)
+        loadServerConfig(SERVER_PROPERTIES).withKoreSettings(KORE_SETTINGS)
     } catch (e: IllegalStateException) {
         log.error(e.message)
         exitProcess(1)
@@ -108,7 +109,7 @@ fun main() {
     val running = config.copy(gameMode = storage.settings.gameMode, seed = storage.settings.seed)
     storage.world.features = config.features
     storage.world.difficulty = config.difficulty
-    config.features.off.takeIf { it.isNotEmpty() }?.let { log.info("Running without {}, as {} switches them off", it.joinToString(), KORE_JSON) }
+    config.features.off.takeIf { it.isNotEmpty() }?.let { log.info("Running without {}, as {} switches them off", it.joinToString(), KORE_SETTINGS) }
     // One thread carries every client's UDP traffic and runs every session, so the world needs no locks.
     val loop = NioEventLoopGroup(1)
     // Completes when the server should stop: when `/stop` runs, or the signaling server closes.

@@ -142,7 +142,7 @@ class PlainMessageConverter : ClassicConverter() {
 }
 
 /**
- * What the logs keep, as kore.json has it: detail for working out what
+ * What the logs keep, as kore.jsonc has it: detail for working out what
  * went wrong in the console too, as the log file always has it, and what
  * players say and the commands they run, in both, or neither, to keep the
  * logs short.

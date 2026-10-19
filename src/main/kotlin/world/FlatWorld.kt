@@ -340,7 +340,7 @@ class FlatWorld(
     /** The world's game rules. */
     var rules = GameRules()
 
-    /** The game's systems that run in this world, as kore.json switches them. */
+    /** The game's systems that run in this world, as kore.jsonc switches them. */
     var features = Features()
 
     /** The climate of [biome]: how warm it is, and what falls from the sky when it rains, and how deep snow piles up. */

@@ -4,6 +4,7 @@ import org.koremc.storage.FlatPreset
 import org.koremc.world.CommandLimits
 import org.koremc.world.Features
 import kotlin.io.path.createTempDirectory
+import kotlin.io.path.exists
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.test.AfterTest
@@ -14,7 +15,7 @@ import kotlin.test.assertTrue
 
 class KoreSettingsTest {
     private val directory = createTempDirectory("kore-settings")
-    private val file = directory.resolve("kore.json")
+    private val file = directory.resolve("kore.jsonc")
 
     @AfterTest
     fun cleanUp() {
@@ -22,7 +23,7 @@ class KoreSettingsTest {
     }
 
     @Test
-    fun `with no kore json, a new file has Kore's own settings at their defaults, each explained, and reads back the same`() {
+    fun `with no kore jsonc, a new file has Kore's own settings at their defaults, each explained, and reads back the same`() {
         assertEquals(ServerConfig(), ServerConfig().withKoreSettings(file))
 
         assertEquals(
@@ -196,6 +197,19 @@ class KoreSettingsTest {
         assertTrue("\"shutdownMessage\": \"Server closed\"" in written && "// What players still on the server" in written, written)
         assertTrue(written.indexOf("advertisedAddresses") < written.indexOf("operatorDomain"), "Kore's in its own order")
         assertTrue(written.indexOf("operatorDomain") < written.indexOf("\"someoneElses\": 1"), "then the rest")
+    }
+
+    @Test
+    fun `an older Kore's kore json is renamed kore jsonc, unless there's one already`() {
+        val old = directory.resolve("kore.json")
+        old.writeText("""{ "operatorDomain": "example.com" }""")
+        renameOldKoreSettings(old, file)
+        assertEquals("example.com", ServerConfig().withKoreSettings(file).operatorDomain)
+        assertTrue(!old.exists())
+
+        old.writeText("""{ "operatorDomain": "elsewhere.com" }""")
+        renameOldKoreSettings(old, file)
+        assertEquals("example.com", ServerConfig().withKoreSettings(file).operatorDomain, "the new one stays")
     }
 
     @Test

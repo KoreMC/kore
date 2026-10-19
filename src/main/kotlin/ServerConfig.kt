@@ -10,7 +10,7 @@ import org.koremc.world.Features
 import java.nio.file.Path
 
 /**
- * The server's settings, as server.properties and kore.json give them (see
+ * The server's settings, as server.properties and kore.jsonc give them (see
  * [loadServerConfig] and [withKoreSettings]). The defaults are what new files
  * start with.
  */
@@ -64,11 +64,11 @@ data class ServerConfig(
     val seed: Long? = null,
     /** The most chunks around each player Kore will send, whatever the client asks for. */
     val viewDistance: Int = 8,
-    /** The game's systems Kore runs, all of them unless kore.json switches some off. */
+    /** The game's systems Kore runs, all of them unless kore.jsonc switches some off. */
     val features: Features = Features(),
-    /** The most blocks a command changes at once: the game's own limits, unless kore.json changes them. */
+    /** The most blocks a command changes at once: the game's own limits, unless kore.jsonc changes them. */
     val commandLimits: CommandLimits = CommandLimits(),
-    /** What the logs keep: what players say and the commands they run, and detail in the console, as kore.json says. */
+    /** What the logs keep: what players say and the commands they run, and detail in the console, as kore.jsonc says. */
     val logs: LogSettings = LogSettings(),
     // Must match the client's protocol number and version string.
     val protocol: Int = 2193,

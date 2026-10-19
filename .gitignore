@@ -73,6 +73,7 @@ bin/
 operator.key
 permissions.json
 server.properties
+kore.jsonc
 kore.json
 
 # Each run's log, written by Kore (see logback.xml)

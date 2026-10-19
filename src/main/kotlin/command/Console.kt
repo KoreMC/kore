@@ -85,7 +85,7 @@ class Console(private val run: (String) -> Unit) {
  * which goes back below them as it was, so that what the server logs never
  * lands in the middle of a command. Without a terminal to keep them apart,
  * or before the console reads, it writes them out as they come. Detail it
- * leaves to the log file, unless kore.json asks for it, and every packet
+ * leaves to the log file, unless kore.jsonc asks for it, and every packet
  * it leaves there either way.
  */
 class ConsoleLogAppender : AppenderBase<ILoggingEvent>() {
@@ -93,7 +93,7 @@ class ConsoleLogAppender : AppenderBase<ILoggingEvent>() {
     var encoder: Encoder<ILoggingEvent>? = null
 
     override fun append(event: ILoggingEvent) {
-        // Detail, only when kore.json asks for it, and never every packet, which would bury the rest.
+        // Detail, only when kore.jsonc asks for it, and never every packet, which would bury the rest.
         if (!event.level.isGreaterOrEqual(Level.INFO) && (!showDebug || event.loggerName == PACKET_LOG)) return
         val text = String(encoder?.encode(event) ?: return, Charsets.UTF_8)
         val reading = reader?.takeUnless { it.terminal.type.startsWith(Terminal.TYPE_DUMB) }
@@ -108,7 +108,7 @@ class ConsoleLogAppender : AppenderBase<ILoggingEvent>() {
         @Volatile
         var reader: LineReader? = null
 
-        /** Whether the console shows detail for working out what went wrong, as kore.json says. */
+        /** Whether the console shows detail for working out what went wrong, as kore.jsonc says. */
         @Volatile
         var showDebug = false
     }

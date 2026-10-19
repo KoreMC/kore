@@ -44,7 +44,7 @@ private fun <T : Enum<T>> named(values: List<T>, value: String): T? =
 /** A world's seed from what's written: a number as it is, words as Java Edition makes a number of them, and nothing for a random one. */
 private fun seedOf(value: String): Long? = if (value.isEmpty()) null else value.toLongOrNull() ?: value.hashCode().toLong()
 
-/** The settings Kore has, in the order a new server.properties lists them. Kore's own are in kore.json instead. */
+/** The settings Kore has, in the order a new server.properties lists them. Kore's own are in kore.jsonc instead. */
 private val SETTINGS = listOf(
     Setting("server-name", "The server's name, as players see it.\nAllowed values: any text without a semicolon", { it.name }) { value ->
         copy(name = value).takeIf { ';' !in value }

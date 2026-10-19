@@ -26,7 +26,7 @@ const val MAX_CLONE = 655360
 
 /**
  * The most blocks `/fill` fills, and `/clone` copies, at once, or null for
- * no limit: the game's own limits, unless kore.json changes them.
+ * no limit: the game's own limits, unless kore.jsonc changes them.
  */
 @Serializable
 data class CommandLimits(
@@ -35,7 +35,7 @@ data class CommandLimits(
 )
 
 /**
- * A limit as kore.json gives it: a number, true for the game's own limit,
+ * A limit as kore.jsonc gives it: a number, true for the game's own limit,
  * [own], or false for none, which reads as null. Each limit reads with its
  * own, as [FillLimit] and [CloneLimit].
  */

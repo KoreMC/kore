@@ -10,7 +10,7 @@
     <conversionRule conversionWord="plainMessage" converterClass="org.koremc.PlainMessageConverter"/>
 
     <!--
-        What's happening, without the detail, which the file has, unless kore.json asks for it: what each line is, when,
+        What's happening, without the detail, which the file has, unless kore.jsonc asks for it: what each line is, when,
         to the second, and what it says. Written above the line being typed at the console, never into it.
     -->
     <appender name="CONSOLE" class="org.koremc.command.ConsoleLogAppender">

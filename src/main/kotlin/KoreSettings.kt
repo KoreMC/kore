@@ -14,15 +14,23 @@ import org.koremc.world.Features
 import org.slf4j.LoggerFactory
 import java.nio.file.Path
 import kotlin.io.path.exists
+import kotlin.io.path.moveTo
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
 
 private val log = LoggerFactory.getLogger("org.koremc.KoreSettings")
 
-/** Where Kore keeps the settings of its own, which the game's dedicated server doesn't have: beside server.properties. */
-val KORE_JSON: Path = Path.of("kore.json")
+/**
+ * Where Kore keeps the settings of its own, which the game's dedicated
+ * server doesn't have: beside server.properties, as JSON with comments,
+ * named so editors take the comments.
+ */
+val KORE_SETTINGS: Path = Path.of("kore.jsonc")
 
-/** Reads kore.json with the comments explaining each setting, as JSON with comments has them, and a comma after the last if there is one. */
+/** Where Kore 0.1.0 kept them, named as plain JSON, which editors mark every comment in as wrong. */
+val OLD_KORE_SETTINGS: Path = Path.of("kore.json")
+
+/** Reads kore.jsonc with the comments explaining each setting, as JSON with comments has them, and a comma after the last if there is one. */
 @OptIn(ExperimentalSerializationApi::class)
 private val json = Json {
     encodeDefaults = true
@@ -31,7 +39,7 @@ private val json = Json {
     allowTrailingComma = true
 }
 
-/** The settings in kore.json: Kore's own, which server.properties, as the game's dedicated server has it, has no place for. */
+/** The settings in kore.jsonc: Kore's own, which server.properties, as the game's dedicated server has it, has no place for. */
 @Serializable
 private data class KoreSettings(
     val advertisedAddresses: List<String>,
@@ -84,8 +92,15 @@ private val COMMENTS = mapOf(
     "logs.commands" to "The commands players run, CMD.",
 )
 
+/** Renames [old], an older Kore's settings file, to [file], unless there's one there already. */
+fun renameOldKoreSettings(old: Path, file: Path) {
+    if (!old.exists() || file.exists()) return
+    old.moveTo(file)
+    log.info("Renamed {} to {}", old, file)
+}
+
 /**
- * These settings, with Kore's own from [file], kore.json. With no file,
+ * These settings, with Kore's own from [file], kore.jsonc. With no file,
  * writes one with every setting as these have it, each explained. A file
  * without some of them, or without some of a setting's own, as from an
  * older Kore, is written again with them, as these have them, keeping the
@@ -148,7 +163,7 @@ private fun filledIn(saved: JsonObject, defaults: JsonObject): JsonObject = Json
     } + saved.filterKeys { it !in defaults },
 )
 
-/** [settings] as kore.json has them: each on a line of its own, below what it's for, and those within one indented. */
+/** [settings] as kore.jsonc has them: each on a line of its own, below what it's for, and those within one indented. */
 private fun written(settings: JsonObject, prefix: String = "", indent: String = "    "): String =
     settings.entries.joinToString(",\n\n", prefix = "{\n", postfix = "\n${indent.dropLast(4)}}") { (key, value) ->
         val comment = COMMENTS[prefix + key]?.lines()?.joinToString("") { "$indent// $it\n" }.orEmpty()

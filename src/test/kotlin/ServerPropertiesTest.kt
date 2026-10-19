@@ -29,7 +29,7 @@ class ServerPropertiesTest {
         assertTrue(written.startsWith("server-name=Kore Server\n# The server's name, as players see it.\n# Allowed values: "), written)
         assertTrue("\n\nlevel-name=Bedrock level\n#" in written, "the dedicated server's name for a world")
         assertTrue("\n\nlevel-seed=\n#" in written, "a random seed, by default")
-        assertTrue("advertised-addresses" !in written && "operator-domain" !in written, "Kore's own settings are in kore.json")
+        assertTrue("advertised-addresses" !in written && "operator-domain" !in written, "Kore's own settings are in kore.jsonc")
         assertEquals(ServerConfig(), loadServerConfig(file))
     }
 
