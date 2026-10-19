@@ -1,6 +1,8 @@
 package org.koremc.protocol
 
 import io.netty.buffer.ByteBuf
+import org.cloudburstmc.nbt.NbtMap
+import org.cloudburstmc.nbt.NbtType
 import org.koremc.registry.ItemStack
 import org.koremc.world.Vec3
 
@@ -11,6 +13,7 @@ private const val TAKE_ITEM_ACTOR = 17
 private const val MOVE_ACTOR_ABSOLUTE = 18
 internal const val ACTOR_EVENT = 27
 private const val SET_ACTOR_MOTION = 40
+private const val SYNC_ACTOR_PROPERTY = 165
 private const val INVENTORY_SLOT = 50
 
 /** The window and container ID of a player's own items: the hotbar and the rest of the inventory. */
@@ -133,6 +136,72 @@ internal fun ByteBuf.writeRidesNothing(version: GameVersion) {
     writeVarUInt(0) // Entities it rides or is ridden by
     if (version >= GameVersion.V1_26_60) writeBoolean(false) // A block it rides
 }
+
+/**
+ * Something thrown appearing to the client: the entity [entityId], of the
+ * game's [type], like `minecraft:snowball`, thrown by the entity [thrower],
+ * its bottom at [position], moving at [velocity] blocks a tick, with
+ * [properties] of its entity set, by their place among its properties,
+ * like an egg's climate variant. It's a quarter of a block each way, as an
+ * item is.
+ */
+data class AddProjectile(
+    val entityId: Long,
+    val type: String,
+    val thrower: Long,
+    val position: Vec3,
+    val velocity: Vec3,
+    val properties: List<Pair<Int, Int>> = emptyList(),
+) : VersionedPacket {
+    override val id get() = ADD_ACTOR
+
+    override fun encodeBody(out: ByteBuf, version: GameVersion) {
+        out.writeVarLong(entityId)
+        out.writeVarULong(entityId)
+        out.writeString(type)
+        out.writeVec3(position)
+        out.writeVec3(velocity)
+        out.writeFloatLE(0f).writeFloatLE(0f) // Pitch and yaw
+        out.writeFloatLE(0f) // Head yaw
+        out.writeFloatLE(0f) // Body yaw
+        out.writeVarUInt(0) // Attributes
+        out.writeActorData(
+            listOf(
+                flagsItem(setOf(ActorFlag.HAS_GRAVITY, ActorFlag.CAN_CLIMB)),
+                LongItem(ActorDataId.OWNER, thrower),
+                FloatItem(ActorDataId.WIDTH, ITEM_SIZE),
+                FloatItem(ActorDataId.HEIGHT, ITEM_SIZE),
+            ),
+        )
+        out.writeVarUInt(properties.size)
+        for ((index, value) in properties) out.writeVarUInt(index).writeVarInt(value)
+        out.writeVarUInt(0) // Float properties
+        out.writeRidesNothing(version)
+    }
+}
+
+/**
+ * The properties an entity of the game's [type] has, like an egg's climate
+ * variant, which the client must hear of before it can show one: each an
+ * enum, by its [EnumProperty.name], with the values it takes. The client
+ * names them by their place in [properties].
+ */
+data class SyncActorProperty(val type: String, val properties: List<EnumProperty>) : ServerPacket {
+    override val id get() = SYNC_ACTOR_PROPERTY
+
+    override fun encodeBody(out: ByteBuf) {
+        val listed = properties.map { NbtMap.builder().putString("name", it.name).putInt("type", ENUM_PROPERTY).putList("enum", NbtType.STRING, it.values).build() }
+        out.writeNbt(NbtMap.builder().putList("properties", NbtType.COMPOUND, listed).putString("type", type).build())
+    }
+
+    private companion object {
+        /** How the game numbers a property that's one of a list of values. */
+        const val ENUM_PROPERTY = 3
+    }
+}
+
+/** An entity's property that's one of [values], called [name]. */
+data class EnumProperty(val name: String, val values: List<String>)
 
 /** The game's name for lightning bolts, which the sound of their thunder names too. */
 const val LIGHTNING_BOLT = "minecraft:lightning_bolt"

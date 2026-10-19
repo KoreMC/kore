@@ -38,6 +38,7 @@ import org.koremc.protocol.AddFallingBlock
 import org.koremc.protocol.AddItemActor
 import org.koremc.protocol.AddLightning
 import org.koremc.protocol.AddPlayer
+import org.koremc.protocol.AddProjectile
 import org.koremc.protocol.Animate
 import org.koremc.protocol.Attribute
 import org.koremc.protocol.BatchCodec
@@ -65,6 +66,7 @@ import org.koremc.protocol.Difficulty
 import org.koremc.protocol.Disconnect
 import org.koremc.protocol.EditedBlockData
 import org.koremc.protocol.EnchantOption
+import org.koremc.protocol.EnumProperty
 import org.koremc.protocol.FloatItem
 import org.koremc.protocol.GameMode
 import org.koremc.protocol.GameRulesChanged
@@ -141,6 +143,7 @@ import org.koremc.protocol.SubChunkEntry
 import org.koremc.protocol.SubChunkOffset
 import org.koremc.protocol.SubChunkRequest
 import org.koremc.protocol.SubChunkResult
+import org.koremc.protocol.SyncActorProperty
 import org.koremc.protocol.TakeItemActor
 import org.koremc.protocol.Text
 import org.koremc.protocol.ToggleCrafterSlot
@@ -155,8 +158,8 @@ import org.koremc.protocol.abilitiesFor
 import org.koremc.protocol.decodeClientPacket
 import org.koremc.protocol.encode
 import org.koremc.protocol.flagsItem
-import org.koremc.protocol.secondFlagsItem
 import org.koremc.protocol.parseConnectionRequest
+import org.koremc.protocol.secondFlagsItem
 import org.koremc.protocol.skinFrom
 import org.koremc.protocol.subChunkPayload
 import org.koremc.registry.AIR
@@ -199,26 +202,15 @@ import org.koremc.world.BREWING_STAND
 import org.koremc.world.BREWS_PER_FUEL
 import org.koremc.world.BlockPos
 import org.koremc.world.BlockSound
+import org.koremc.world.Box
 import org.koremc.world.BrewingStand
 import org.koremc.world.BrokenBlock
 import org.koremc.world.CAKE_NUTRITION
 import org.koremc.world.CAKE_SATURATION
+import org.koremc.world.CLIMATE_VARIANT
+import org.koremc.world.CLIMATE_VARIANTS
 import org.koremc.world.CRAFTER_SLOTS
 import org.koremc.world.CRITICAL_HIT_PARTICLES
-import org.koremc.world.HEAVY_SMASH_FALL
-import org.koremc.world.SHIELD
-import org.koremc.world.SHIELD_COOLDOWN
-import org.koremc.world.SHIELD_DISABLED_TICKS
-import org.koremc.world.SHIELD_RAISE_TICKS
-import org.koremc.world.SMASH_FALL
-import org.koremc.world.THORNS_WEAR
-import org.koremc.world.disablesShields
-import org.koremc.world.shieldCovers
-import org.koremc.world.shieldWear
-import org.koremc.world.smashDamage
-import org.koremc.world.smashesWith
-import org.koremc.world.thornsPrick
-import org.koremc.world.windBurstLift
 import org.koremc.world.Cartographed
 import org.koremc.world.Changes
 import org.koremc.world.ChunkPos
@@ -226,9 +218,11 @@ import org.koremc.world.Crafter as CrafterMachine
 import org.koremc.world.DISPENSER_SLOTS
 import org.koremc.world.DamageCause
 import org.koremc.world.Dispenser
+import org.koremc.world.EGG_ENTITY
 import org.koremc.world.EMPTY_MAP
 import org.koremc.world.ENCHANTED_HIT_PARTICLES
 import org.koremc.world.ENDER_EYE
+import org.koremc.world.ENDER_PEARL_DAMAGE
 import org.koremc.world.Effect
 import org.koremc.world.EffectLevel
 import org.koremc.world.Effects
@@ -246,6 +240,7 @@ import org.koremc.world.Fired
 import org.koremc.world.FlatWorld
 import org.koremc.world.Furnace
 import org.koremc.world.GROWTH
+import org.koremc.world.HEAVY_SMASH_FALL
 import org.koremc.world.HOPPER
 import org.koremc.world.HOPPER_SLOTS
 import org.koremc.world.HUNGER_EFFECT_EXHAUSTION
@@ -283,7 +278,14 @@ import org.koremc.world.PLAYER_WALK_SPEED
 import org.koremc.world.PLAYER_WIDTH
 import org.koremc.world.Placer
 import org.koremc.world.PlayerExperience
+import org.koremc.world.Projectile
+import org.koremc.world.ProjectileHit
 import org.koremc.world.REGENERATION_EXHAUSTION
+import org.koremc.world.SHIELD
+import org.koremc.world.SHIELD_COOLDOWN
+import org.koremc.world.SHIELD_DISABLED_TICKS
+import org.koremc.world.SHIELD_RAISE_TICKS
+import org.koremc.world.SMASH_FALL
 import org.koremc.world.SNOW_LAYER
 import org.koremc.world.SPRINT_EXHAUSTION
 import org.koremc.world.SPRINT_JUMP_EXHAUSTION
@@ -295,6 +297,9 @@ import org.koremc.world.SWIM_EXHAUSTION
 import org.koremc.world.SongChange
 import org.koremc.world.Storage
 import org.koremc.world.Surroundings
+import org.koremc.world.THORNS_WEAR
+import org.koremc.world.THROW_SPEED
+import org.koremc.world.Thrown
 import org.koremc.world.Vec3
 import org.koremc.world.Vitals
 import org.koremc.world.WELL_FED
@@ -318,6 +323,7 @@ import org.koremc.world.corner
 import org.koremc.world.critical
 import org.koremc.world.critsWith
 import org.koremc.world.damageAfter
+import org.koremc.world.disablesShields
 import org.koremc.world.dispenserKind
 import org.koremc.world.drawMap
 import org.koremc.world.dropExperience
@@ -357,6 +363,7 @@ import org.koremc.world.lecternBook
 import org.koremc.world.less
 import org.koremc.world.liquid
 import org.koremc.world.lookAtBeacons
+import org.koremc.world.lookVector
 import org.koremc.world.mapId
 import org.koremc.world.markSign
 import org.koremc.world.movingFrom
@@ -380,9 +387,13 @@ import org.koremc.world.savedBlockEntitiesIn
 import org.koremc.world.setBeaconPowers
 import org.koremc.world.settle
 import org.koremc.world.sharpnessDamage
+import org.koremc.world.shieldCovers
+import org.koremc.world.shieldWear
 import org.koremc.world.showing
 import org.koremc.world.side
 import org.koremc.world.signWaxed
+import org.koremc.world.smashDamage
+import org.koremc.world.smashesWith
 import org.koremc.world.smokeDirection
 import org.koremc.world.snapsUp
 import org.koremc.world.solidHeights
@@ -391,9 +402,11 @@ import org.koremc.world.stepOn
 import org.koremc.world.storage
 import org.koremc.world.surroundings
 import org.koremc.world.takeFromFrame
+import org.koremc.world.thornsPrick
 import org.koremc.world.tickBlocks
 import org.koremc.world.tickItems
 import org.koremc.world.tickOrbs
+import org.koremc.world.tickProjectiles
 import org.koremc.world.tickRandomly
 import org.koremc.world.tickSky
 import org.koremc.world.toggleCrafterSlot
@@ -411,6 +424,7 @@ import org.koremc.world.useToolOn
 import org.koremc.world.wearFromBreaking
 import org.koremc.world.wearFromHitting
 import org.koremc.world.wholeExperience
+import org.koremc.world.windBurstLift
 import org.koremc.world.withBlockData
 import org.koremc.world.withStrength
 import org.koremc.world.writeSign
@@ -1280,6 +1294,8 @@ class Session(
                 lightningLevel = if (world.weather.thundering) 1f else 0f,
                 gameRules = world.rules.all,
             ),
+            // The client can't show an egg without hearing of its climate variant first.
+            SyncActorProperty(EGG_ENTITY, listOf(EnumProperty(CLIMATE_VARIANT, CLIMATE_VARIANTS))),
             *game.definitions.toTypedArray(),
         )
         state = State.LOADING_WORLD
@@ -2054,7 +2070,7 @@ class Session(
      * and an empty locator map a locator map, in creative too. With more than
      * one empty map, the map goes among their items, or drops at their feet
      * if there's no room. Food is eaten, as [eatFrom] has it, by the client's
-     * [tick].
+     * [tick], and snowballs, eggs and ender pearls are thrown.
      */
     private fun useInAir(use: ItemUse, tick: Long?, legacyRequestId: Int) {
         if (use.hotbarSlot in 0 until HOTBAR_SIZE) heldSlot = use.hotbarSlot
@@ -2062,6 +2078,7 @@ class Session(
         if (gameMode == GameMode.SPECTATOR) return
         armourSlotFor(held.stack.item.name)?.let { return putOn(it, held, legacyRequestId) }
         held.stack.item.food?.let { return eatFrom(held, it, tick ?: aliveTicks.toLong()) }
+        Thrown.from(held.stack.item.name)?.let { return throwHeld(it) }
         if (held.stack.item.name != EMPTY_MAP) return
         val blank = game.items.of(FILLED_MAP) ?: return
         val map = world.maps.start(floor(position.x).toInt(), floor(position.z).toInt(), showsPlayers = held.stack.aux == LOCATOR)
@@ -2069,6 +2086,28 @@ class Session(
         world.drawMap(map, position.x, position.z, game.traits)
         swapHeld(drawn)
         log.debug("{} started map {}, around {}, {}", player?.displayName, map.id, map.centreX, map.centreZ)
+    }
+
+    /**
+     * Throws one of what the player holds, as [kind], from their eyes the
+     * way they look, unless projectiles are switched off, or they're still
+     * waiting to throw another of its kind, as after an ender pearl, which
+     * they then wait a moment to throw again. Everyone around hears it.
+     */
+    private fun throwHeld(kind: Thrown) {
+        if (!world.features.projectiles) return
+        val cooldown = kind.cooldown
+        if (cooldown != null && (cooldowns[cooldown.category] ?: 0) > aliveTicks) return
+        val look = lookVector(yaw, pitch)
+        val from = eyes()
+        world.spawnProjectile(kind, entityId, Vec3(from.x, from.y - kind.drop, from.z), Vec3(look.x * THROW_SPEED, look.y * THROW_SPEED, look.z * THROW_SPEED))
+        if (cooldown != null) {
+            cooldowns[cooldown.category] = aliveTicks + cooldown.ticks
+            send(PlayerStartItemCooldown(cooldown.category, cooldown.ticks))
+        }
+        if (!creative) inventory.remove(heldSlot)
+        showAround(position.toBlockPos(), LevelSoundEvent(LevelSoundEvent.THROW, position, -1, entityType = PLAYER_ENTITY))
+        log.debug("{} threw {}", name, kind.name.lowercase())
     }
 
     /**
@@ -3046,6 +3085,59 @@ class Session(
         if (packets.isNotEmpty()) send(*packets.toTypedArray())
     }
 
+    /** The projectiles the client has been shown. */
+    private val shownProjectiles = HashSet<Long>()
+
+    /**
+     * Shows the client what's been thrown and is flying in the chunks it
+     * has: those it hasn't seen appear, the rest move, and those gone go.
+     * Run once a tick.
+     */
+    fun syncProjectiles() {
+        if (state != State.IN_GAME) return
+        val inView = world.projectiles.filter { it.position.toBlockPos().chunk in sentChunks }
+        val ids = inView.mapTo(HashSet()) { it.id }
+        val packets = shownProjectiles.filter { it !in ids }.map(::RemoveActor).toMutableList<ServerPacket>()
+        for (projectile in inView) {
+            packets += if (projectile.id in shownProjectiles) {
+                MoveActorAbsolute(projectile.id, projectile.position, onGround = false)
+            } else {
+                // An egg's climate variant is the egg entity's only property.
+                val properties = listOfNotNull(projectile.kind.climate?.let { 0 to it })
+                AddProjectile(projectile.id, projectile.kind.entity, projectile.thrower, projectile.position, projectile.velocity, properties)
+            }
+        }
+        shownProjectiles.retainAll(ids)
+        shownProjectiles += ids
+        if (packets.isNotEmpty()) send(*packets.toTypedArray())
+    }
+
+    /** Where the player can be hit, as tall as they are now. */
+    internal val hitbox: Box get() = Box.of(feet, PLAYER_WIDTH, playerHeight())
+
+    /**
+     * The player hit by [projectile], thrown by [thrower]: unless their
+     * shield's up and covers it, or it's another player's and the pvp rule
+     * says no, it hurts them, though a snowball, egg or ender pearl by
+     * nothing, and knocks them back the way it flew, if it's the first hurt
+     * in a while.
+     */
+    internal fun hitBy(projectile: Projectile, thrower: Session?) {
+        if (thrower != null && thrower !== this && !world.rules.pvp) return
+        if (blocks(projectile.position, weapon = null, damage = 0f)) return
+        val fresh = !vitals.inGrace
+        val flew = projectile.velocity
+        if (hurt(0f, DamageCause.PROJECTILE, by = thrower) && fresh) knockBack(Vec3(feet.x - flew.x, feet.y, feet.z - flew.z), extra = 0)
+    }
+
+    /** Takes the player to [at], where an ender pearl they threw landed, which hurts them as a fall does, unless they've died since. */
+    internal fun arriveByPearl(at: Vec3) {
+        if (dead || !isInGame) return
+        showAround(position.toBlockPos(), LevelSoundEvent(LevelSoundEvent.TELEPORT, position, -1))
+        teleport(at, yaw, pitch)
+        hurt(ENDER_PEARL_DAMAGE, DamageCause.FALL)
+    }
+
     /**
      * What others see of a player at a moment: where they are and which way
      * they look, whether they sneak or sprint, and what they hold.
@@ -3499,7 +3591,7 @@ class Session(
         val damage = damageAfter(amount, cause, inventory.armour.contents().map { it?.stack }, effects.level(Effect.RESISTANCE), breach = weapon?.levelOf(BREACH) ?: 0)
         val fresh = !vitals.inGrace
         vitals.hurt(damage) ?: return false
-        if (cause.armour) {
+        if (cause.armour && amount > 0) {
             wearArmour(armourWear(amount))
             exhaust(HURT_EXHAUSTION)
         }
@@ -3569,7 +3661,7 @@ class Session(
         val fresh = !target.vitals.inGrace
         val damage = withStrength(attackDamage(held), effects.level(Effect.STRENGTH), effects.level(Effect.WEAKNESS)) + sharpness +
             (fallen?.let { smashDamage(it, held?.levelOf(DENSITY) ?: 0) } ?: 0f)
-        if (target.blocks(this, held, if (crit) critical(damage) else damage)) {
+        if (target.blocks(feet, held, if (crit) critical(damage) else damage)) {
             // Fire Aspect sets them burning all the same, and the shield knocks the player back.
             held?.levelOf(FIRE_ASPECT)?.takeIf { it > 0 }?.let { target.setOnFire(it * FIRE_ASPECT_TICKS) }
             knockBack(target.feet, extra = 0)
@@ -3660,15 +3752,15 @@ class Session(
             .firstOrNull { (container, slot) -> container[slot]?.stack?.item?.name == SHIELD }
 
     /**
-     * Blocks a hit of [damage] from [attacker], with [weapon], with the
-     * player's shield, if it's been up long enough and the hit comes from in
-     * front of them: it does nothing to them, but wears the shield, and an
-     * axe disables it for a while. Everyone around hears it. Returns whether
-     * it blocked the hit.
+     * Blocks a hit of [damage] from [from], with [weapon], with the player's
+     * shield, if it's been up long enough and the hit comes from in front of
+     * them: it does nothing to them, but wears the shield, and an axe
+     * disables it for a while. Everyone around hears it. Returns whether it
+     * blocked the hit.
      */
-    private fun blocks(attacker: Session, weapon: ItemStack?, damage: Float): Boolean {
+    private fun blocks(from: Vec3, weapon: ItemStack?, damage: Float): Boolean {
         val raisedAt = shieldRaisedAt ?: return false
-        if (aliveTicks - raisedAt < SHIELD_RAISE_TICKS || !shieldCovers(feet, yaw, attacker.feet)) return false
+        if (aliveTicks - raisedAt < SHIELD_RAISE_TICKS || !shieldCovers(feet, yaw, from)) return false
         val (container, slot, window) = heldShield() ?: return false
         val shield = container[slot] ?: return false
         val worn = shield.stack.worn(shieldWear(damage))
@@ -4373,6 +4465,36 @@ internal fun Collection<Session>.showAround(packets: List<Pair<BlockPos, ServerP
  * held either way, and falling blocks that can't land drop as items. Run
  * once a tick.
  */
+/**
+ * Flies what's been thrown a tick, at the players in the game, and lands
+ * what hits something: it bursts where it hit for everyone around to see,
+ * a player it hit is hit by it, and an ender pearl takes whoever threw it
+ * there.
+ */
+internal fun Collection<Session>.flyProjectiles(game: GameData) {
+    val players = filter { it.isInGame && !it.dead && it.gameMode != GameMode.SPECTATOR }
+    for (hit in game.world.tickProjectiles(players.associate { it.entityId to it.hitbox })) {
+        val projectile = hit.projectile
+        val thrower = players.find { it.entityId == projectile.thrower }
+        if (hit is ProjectileHit.Entity) players.find { it.entityId == hit.entityId }?.hitBy(projectile, thrower)
+        showAround(burst(projectile.kind, hit.at, game).map { hit.at.toBlockPos() to it })
+        if (projectile.kind == Thrown.ENDER_PEARL) thrower?.arriveByPearl(hit.at)
+    }
+}
+
+/** How many bits a snowball or an egg bursts into where it hits. */
+private const val BURST_PARTICLES = 6
+
+/** What everyone around sees and hears of [kind] landing [at]: a snowball's puff, an egg smashing, in bits of its own colour, or an ender pearl's flash. */
+private fun burst(kind: Thrown, at: Vec3, game: GameData): List<ServerPacket> = when {
+    kind == Thrown.SNOWBALL -> List(BURST_PARTICLES) { LevelEvent(LevelEvent.PARTICLE_SNOWBALL_POOF, at, 0) }
+    kind.egg -> {
+        val egg = (game.items.of(kind.item)?.item?.runtimeId ?: 0) shl Short.SIZE_BITS
+        List(BURST_PARTICLES) { LevelEvent(LevelEvent.PARTICLE_ITEM_BREAK, at, egg) }
+    }
+    else -> listOf(LevelEvent(LevelEvent.PARTICLES_TELEPORT, at, 0), LevelSoundEvent(LevelSoundEvent.TELEPORT, at, -1))
+}
+
 internal fun Collection<Session>.tickBlocks(game: GameData, dropItems: Boolean) {
     val world = game.world
     val stood = world.stepOn(mapNotNull { it.standingAt } + world.items.filter { it.onGround }.map { it.position })
@@ -4650,10 +4772,12 @@ class Sessions(
         sessions.values.forEach { it.tickEffects() }
         sessions.values.tickBeacons(game)
         game.world.tickOrbs(sessions.values.mapNotNull { it.orbTarget })
+        sessions.values.flyProjectiles(game)
         sessions.values.forEach { it.collectItems() }
         sessions.values.forEach { it.collectOrbs() }
         sessions.values.forEach { it.syncItems() }
         sessions.values.forEach { it.syncOrbs() }
+        sessions.values.forEach { it.syncProjectiles() }
         sessions.values.forEach { it.syncWindow() }
         sessions.values.forEach { it.syncPlayers() }
         sessions.values.forEach { it.drawHeldMaps() }

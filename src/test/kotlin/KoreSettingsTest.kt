@@ -82,7 +82,11 @@ class KoreSettingsTest {
 
                     // Players hitting each other: damage by weapon, enchantments and effects, critical hits, knockback and Fire Aspect.
                     // Off, a hit does nothing. The pvp game rule turns it off too, for a while.
-                    "combat": true
+                    "combat": true,
+
+                    // Throwing snowballs, eggs and ender pearls, which hit players and knock them back, and an ender pearl taking its thrower
+                    // where it lands. Off, they're only items.
+                    "projectiles": true
                 },
 
                 // The most blocks a command changes at once: a number, true for the game's own limit, or false for none.

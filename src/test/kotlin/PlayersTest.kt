@@ -69,6 +69,7 @@ import org.koremc.world.DamageCause
 import org.koremc.world.Drops
 import org.koremc.world.Features
 import org.koremc.world.FlatWorld
+import org.koremc.world.PLAYER_EYE_HEIGHT
 import org.koremc.world.Vec3
 import java.security.interfaces.ECPublicKey
 import java.util.UUID
@@ -95,6 +96,10 @@ private const val SWORD = 4
 private const val AXE = 5
 private const val MACE = 6
 
+/** The network IDs of the snowball and ender pearl the tests throw. */
+private const val SNOWBALL = 7
+private const val ENDER_PEARL = 8
+
 /** The input flag set on the tick a player lands. */
 private const val VERTICAL_COLLISION = 50
 
@@ -113,12 +118,14 @@ class PlayersTest {
     private val sword = ItemDefinition("minecraft:diamond_sword", SWORD, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 1561)
     private val axe = ItemDefinition("minecraft:iron_axe", AXE, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 250)
     private val mace = ItemDefinition("minecraft:mace", MACE, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 501)
+    private val snowball = ItemDefinition("minecraft:snowball", SNOWBALL, componentBased = false, ItemVersion.NONE, maxStackSize = 16)
+    private val enderPearl = ItemDefinition("minecraft:ender_pearl", ENDER_PEARL, componentBased = false, ItemVersion.NONE, maxStackSize = 16)
 
     /** What every player had when they last left, or null for players new to the world. */
     private var saved: NbtMap? = null
     private val game = GameData(
         world, emptyList(), org.koremc.protocol.BlockDefinitions(emptyList()), creative, emptyMap(), Drops(emptyList(), creative, palette),
-        items = ItemStacks(listOf(helmet, chestplate, shield, sword, axe, mace), creative, palette),
+        items = ItemStacks(listOf(helmet, chestplate, shield, sword, axe, mace, snowball, enderPearl), creative, palette),
         players = object : PlayerSaves {
             override fun load(player: UUID) = saved
 
@@ -194,6 +201,16 @@ class PlayersTest {
                     .writeVarULong(target).writeVarInt(1).writeVarInt(slot)
                     .writeShortLE(held).writeShortLE(if (held == 0) 0 else 1).writeVarUInt(0).writeBoolean(false).writeVarUInt(0).writeByteArray(ByteArray(0))
                     .writeZero(24), // Where they stood, and where they hit
+            ),
+        )
+
+        /** Uses the item [held], in hotbar slot 0, in the air, as throwing it does. */
+        fun throws(held: Int) = sends(
+            ByteBufUtil.getBytes(
+                Unpooled.buffer().writeVarUInt(30).writeVarInt(0).writeBoolean(false).writeVarUInt(2).writeVarUInt(0)
+                    .writeVarInt(1).writeByte(1).writeBlockPos(BlockPos(0, 0, 0)).writeByte(255).writeVarInt(0).writeByte(0).heldItem(held)
+                    .writeZero(24) // Where they stood, and where they clicked, which is nowhere
+                    .writeVarUInt(0).writeBoolean(false).writeByte(0),
             ),
         )
 
@@ -405,6 +422,50 @@ class PlayersTest {
         // Landing, the six blocks he fell do him no harm.
         steve.moves(Vec3(0.5f, -61.38f, 0.5f), inputs = listOf(VERTICAL_COLLISION))
         assertEquals(20f, steve.session.vitals.health)
+    }
+
+    @Test
+    fun `a snowball flies at whoever it's thrown at, and knocks them back, hurting them by nothing`() {
+        val steve = Client(1, "Steve", "1111")
+        val alex = Client(2, "Alex", "2222")
+        alex.moves(Vec3(4.5f, -61.38f, 0.5f))
+        tick()
+        steve.session.give(ItemStack(snowball, 2))
+        alex.received()
+
+        // Steve, at the spawn, throws east, at Alex.
+        steve.moves(Vec3(0.5f, -61.38f, 0.5f), yaw = -90f)
+        steve.throws(SNOWBALL)
+        assertEquals(1, steve.session.heldStack?.count)
+        val thrown = world.projectiles.single()
+        repeat(3) { clients.map { it.session }.flyProjectiles(game) }
+
+        assertTrue(thrown !in world.projectiles)
+        assertEquals(20f, alex.session.vitals.health)
+        val got = alex.received()
+        assertTrue(got.any { it.contentEquals(ActorEvent(2, ActorEvent.HURT, DamageCause.PROJECTILE.id).encode()) })
+        assertTrue(got.any { it.contentEquals(SetActorMotion(2, Vec3(0.45f, 0.3608f, 0f)).encode()) })
+    }
+
+    @Test
+    fun `an ender pearl takes whoever threw it where it lands, hurting them as a fall does, and they wait a second to throw another`() {
+        val steve = Client(1, "Steve", "1111")
+        steve.session.give(ItemStack(enderPearl, 2))
+        steve.received()
+
+        // Straight down, onto the stone.
+        steve.moves(Vec3(0.5f, -61.38f, 0.5f), pitch = 90f)
+        steve.throws(ENDER_PEARL)
+        assertTrue(steve.received().any { it.contentEquals(PlayerStartItemCooldown("ender_pearl", 20).encode()) })
+        // Not another straight after.
+        steve.throws(ENDER_PEARL)
+        val pearl = world.projectiles.single()
+        repeat(3) { clients.map { it.session }.flyProjectiles(game) }
+
+        assertTrue(world.projectiles.isEmpty())
+        assertEquals(15f, steve.session.vitals.health)
+        // His feet where it landed, just above the stone.
+        assertEquals(pearl.position.y + PLAYER_EYE_HEIGHT, steve.session.position.y, 0.001f)
     }
 
     @Test

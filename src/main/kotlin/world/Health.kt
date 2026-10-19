@@ -48,6 +48,8 @@ enum class DamageCause(
     // A hit from another player, and a prick from the Thorns of one hit, whose name the message has too.
     ATTACK(2, "death.attack.player", armour = true),
     THORNS(18, "death.attack.thorns", armour = true),
+    // Something another player threw, which the message names them for.
+    PROJECTILE(3, "death.attack.thrown", armour = true),
     MAGIC(14, "death.attack.magic", armour = false),
     WITHER(15, "death.attack.wither", armour = false),
     STARVATION(16, "death.attack.starve", armour = false, resisted = false),
@@ -147,7 +149,8 @@ class Vitals {
      * for none.
      */
     fun hurt(damage: Float): Float? {
-        if (damage <= 0) return null
+        // A hurt of nothing, like a snowball's, still starts the grace.
+        if (damage < 0) return null
         val taken = if (grace > 0) {
             if (damage <= lastHurt) return null
             damage - lastHurt

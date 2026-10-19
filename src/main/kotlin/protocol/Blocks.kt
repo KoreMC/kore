@@ -236,6 +236,18 @@ data class LevelEvent(val event: Int, val position: Vec3, val data: Int) : Serve
         /** The sound of a Totem of Undying saving someone. */
         const val SOUND_TOTEM_USED = 1052
 
+        /** The flash where an ender pearl lands. */
+        const val PARTICLES_TELEPORT = 2013
+
+        /**
+         * Particles of the old kinds, numbered as the game's particle types:
+         * the bits of an item breaking, whose data is the item's network ID
+         * shifted up 16 bits and its data value, as an egg smashing shows, and
+         * a snowball's puff.
+         */
+        const val PARTICLE_ITEM_BREAK = 0x4000 or 14
+        const val PARTICLE_SNOWBALL_POOF = 0x4000 or 15
+
         /** Dust bursting from the ground under someone a mace smashes, and the gust of Wind Burst launching its wielder. */
         const val PARTICLES_SMASH_GROUND_DUST = 9815
         const val PARTICLES_WIND_EXPLOSION = 3614
@@ -309,6 +321,10 @@ data class LevelSoundEvent(
 
         /** A gust of wind bursting, as Wind Burst's does. */
         const val WIND_CHARGE_BURST = "wind_charge.burst"
+
+        /** Something thrown leaving its thrower's hand, which names them as a player, and an ender pearl taking its thrower away. */
+        const val THROW = "throw"
+        const val TELEPORT = "teleport"
     }
 }
 

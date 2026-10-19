@@ -51,12 +51,18 @@ data class Features(
      * turns it off too, for a while.
      */
     val combat: Boolean = true,
+    /**
+     * Throwing snowballs, eggs and ender pearls, which fly, hit players and
+     * knock them back, and take whoever threw an ender pearl where it lands.
+     * Off, they're only items.
+     */
+    val projectiles: Boolean = true,
 ) {
     /** The names of the systems switched off, as kore.jsonc names them. */
     val off: List<String>
         get() = listOfNotNull(
             "redstone".takeUnless { redstone }, "liquids".takeUnless { liquids }, "fallingBlocks".takeUnless { fallingBlocks },
             "growth".takeUnless { growth }, "machines".takeUnless { machines }, "damage".takeUnless { damage },
-            "hunger".takeUnless { hunger }, "food".takeUnless { food }, "combat".takeUnless { combat },
+            "hunger".takeUnless { hunger }, "food".takeUnless { food }, "combat".takeUnless { combat }, "projectiles".takeUnless { projectiles },
         )
 }

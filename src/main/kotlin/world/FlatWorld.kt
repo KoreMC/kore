@@ -86,6 +86,7 @@ class FlatWorld(
     private val itemEntities = LinkedHashMap<Long, ItemEntity>()
     private val orbEntities = LinkedHashMap<Long, ExperienceOrb>()
     private val fallingEntities = LinkedHashMap<Long, FallingBlock>()
+    private val projectileEntities = LinkedHashMap<Long, Projectile>()
     private var nextEntityId = 1L
 
     /** The items lying in the world, oldest first. */
@@ -96,6 +97,9 @@ class FlatWorld(
 
     /** The blocks falling, oldest first. */
     val fallingBlocks: Collection<FallingBlock> get() = fallingEntities.values
+
+    /** What's been thrown and is still flying, oldest first. */
+    val projectiles: Collection<Projectile> get() = projectileEntities.values
 
     /**
      * Where blocks, or the water inside them, changed since the blocks
@@ -229,6 +233,14 @@ class FlatWorld(
 
     fun removeFallingBlock(id: Long) {
         fallingEntities.remove(id)
+    }
+
+    /** Sets [kind] flying from [position], thrown by the entity [thrower], moving at [velocity]. */
+    fun spawnProjectile(kind: Thrown, thrower: Long, position: Vec3, velocity: Vec3): Projectile =
+        Projectile(newEntityId(), kind, thrower, position, velocity).also { projectileEntities[it.id] = it }
+
+    fun removeProjectile(id: Long) {
+        projectileEntities.remove(id)
     }
 
     /** What's inside the block at [pos], in the second layer: the water in a fence, say, or null for nothing. */

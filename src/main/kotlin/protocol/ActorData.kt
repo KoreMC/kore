@@ -12,6 +12,8 @@ enum class ActorDataId(val id: Int) {
     VARIANT(2),
     /** The name above an actor's head. */
     NAME(4),
+    /** Whose an actor is, like whoever threw a projectile, by their entity ID. */
+    OWNER(5),
     AIR_SUPPLY(7),
     /** How much experience an orb holds, which sets how big it looks. */
     VALUE(15),

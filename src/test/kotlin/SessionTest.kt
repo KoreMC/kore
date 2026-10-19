@@ -30,6 +30,7 @@ import org.koremc.protocol.ContainerOpen
 import org.koremc.protocol.DeathInfo
 import org.koremc.protocol.FloatItem
 import org.koremc.protocol.GameMode
+import org.koremc.protocol.EnumProperty
 import org.koremc.protocol.GameVersion
 import org.koremc.protocol.LevelEvent
 import org.koremc.protocol.InventorySlot
@@ -54,6 +55,7 @@ import org.koremc.protocol.SubChunk
 import org.koremc.protocol.SubChunkEntry
 import org.koremc.protocol.SubChunkOffset
 import org.koremc.protocol.SubChunkResult
+import org.koremc.protocol.SyncActorProperty
 import org.koremc.protocol.subChunkPayload
 import org.koremc.protocol.Text
 import org.koremc.protocol.flagsItem
@@ -354,7 +356,7 @@ class SessionTest {
     }
 
     @Test
-    fun `resource packs end with start game, the item registry and the biomes`() {
+    fun `resource packs end with start game, the egg's properties, the item registry and the biomes`() {
         logIn()
 
         clientSends(clientCacheStatus(supported = true))
@@ -363,13 +365,16 @@ class SessionTest {
         assertFalse(session.isLoadingWorld)
 
         clientSends(packResponse(3, "resourcepackstackfinished"))
-        val (jigsaws, voxelShapes, startGame, registry, biomeList) = batches.decode(sent.last())
+        val packets = batches.decode(sent.last())
+        val (jigsaws, voxelShapes, startGame, properties, registry) = packets
+        val biomeList = packets[5]
         // The client disconnects unless these two come before StartGame.
         assertEquals(0xB9, jigsaws[0].toInt() and 0xFF)
         assertEquals(0xD1, voxelShapes[0].toInt() and 0xFF)
         assertEquals(0x0B, startGame[0].toInt())
         assertEquals(0x0E, startGame[1].toInt()) // Entity ID 7, zigzagged
         assertTrue("minecraft:white_wool_stairs" in startGame.decodeToString()) // The block definitions are in there
+        assertContentEquals(SyncActorProperty("minecraft:egg", listOf(EnumProperty("minecraft:climate_variant", listOf("temperate", "warm", "cold")))).encode(), properties)
         assertContentEquals(itemRegistry.encode(), registry)
         assertContentEquals(biomes.encode(), biomeList)
         assertTrue(session.isLoadingWorld)

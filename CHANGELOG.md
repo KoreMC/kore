@@ -10,6 +10,8 @@ Each release, newest first, with the client version it's for. What's done since 
 - Shields: sneaking raises one, in either hand, which blocks hits from in front once it's up, wearing for it and knocking the
   attacker back. An axe's hit disables it for five seconds
 - Thorns: each piece of armour with it may prick whoever hurts its wearer, hurting and knocking them back, and wears for it
+- Snowballs, eggs of every colour and ender pearls are thrown, and fly. A snowball or egg knocks back a player it hits, and an ender pearl takes
+  its thrower where it lands, hurting them as a fall does. A `projectiles` switch in `kore.jsonc` turns them off
 - The mace smashes, struck from a fall of a block and a half or more: harder for every block, with Density, and the fall then
   does its wielder no harm. Breach gets past armour, and Wind Burst launches the wielder back up
 - The console no longer shows players dying or respawning, only what they say and the commands they run
