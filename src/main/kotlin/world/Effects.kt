@@ -100,6 +100,9 @@ class Effects {
 
     operator fun get(effect: Int): ActiveEffect? = active[effect]
 
+    /** Every effect on the player, by number. */
+    val all: Map<Int, ActiveEffect> get() = active
+
     /** The level of [effect] on the player, from I, or 0 if they don't have it. */
     fun level(effect: Int): Int = active[effect]?.let { it.amplifier + 1 } ?: 0
 
@@ -119,10 +122,10 @@ class Effects {
     /**
      * Gives the player [given] for [ticks], or for ever, for
      * [INFINITE_EFFECT], in place of whatever they have of it, as `/effect`
-     * does, with its [particles] showing or not.
+     * does, with its [particles] showing or not, and [ambient] or not.
      */
-    fun set(given: EffectLevel, ticks: Int, particles: Boolean = true) {
-        active[given.effect] = ActiveEffect(given.amplifier, ticks, ambient = false, particles)
+    fun set(given: EffectLevel, ticks: Int, particles: Boolean = true, ambient: Boolean = false) {
+        active[given.effect] = ActiveEffect(given.amplifier, ticks, ambient, particles)
     }
 
     /** Takes [effect] away. Returns whether the player had it. */

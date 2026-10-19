@@ -74,6 +74,8 @@ import org.koremc.world.BlockPos
 import org.koremc.world.Drops
 import org.koremc.world.BOOK_PUT
 import org.koremc.world.Effect
+import org.koremc.world.EffectLevel
+import org.koremc.world.INFINITE_EFFECT
 import org.koremc.world.beaconPowers
 import org.koremc.world.mapId
 import org.koremc.world.setBeaconPowers
@@ -184,6 +186,9 @@ class ContainersTest {
             schedule = { _, _ -> },
         ) { sent += it }
 
+        /** What the client got as its player came into the game. */
+        val spawned: List<ByteArray>
+
         init {
             clients += this
             sends(ByteBufUtil.getBytes(Unpooled.buffer().writeVarUInt(193).writeInt(PROTOCOL)))
@@ -193,7 +198,9 @@ class ContainersTest {
             sends(packResponse(2, "downloadingfinished"))
             sends(packResponse(3, "resourcepackstackfinished"))
             sends(ByteBufUtil.getBytes(Unpooled.buffer().writeVarUInt(69).writeVarInt(2).writeByte(2)))
+            val before = sent.size
             sends(ByteBufUtil.getBytes(Unpooled.buffer().writeVarUInt(113).writeVarULong(entityId)))
+            spawned = sent.drop(before).flatMap { batches.decode(it) }
             sent.clear()
         }
 
@@ -866,6 +873,25 @@ class ContainersTest {
         assertEquals(GameMode.SURVIVAL, again.session.gameMode)
         val alex = Client(3, "Alex", "2222")
         assertNull(alex.session.heldStack, "someone else starts afresh")
+    }
+
+    @Test
+    fun `a player who leaves keeps their effects, as long as each had left, and sees them again as they come back`() {
+        val steve = Client(1, "Steve", "1111")
+        steve.session.setEffect(EffectLevel(Effect.SPEED, 1), 600, particles = true)
+        steve.session.setEffect(EffectLevel(Effect.NIGHT_VISION), INFINITE_EFFECT, particles = false)
+        steve.session.giveEffect(EffectLevel(Effect.HEALTH_BOOST), 600, ambient = true)
+        repeat(100) { steve.session.tickEffects() }
+        steve.session.leave()
+
+        val again = Client(2, "Steve", "1111")
+
+        assertTrue(again.spawned.has(MobEffect(2, MobEffect.ADD, Effect.SPEED, 1, 500).encode()))
+        assertTrue(again.spawned.has(MobEffect(2, MobEffect.ADD, Effect.NIGHT_VISION, 0, INFINITE_EFFECT, particles = false).encode()))
+        assertTrue(again.spawned.has(MobEffect(2, MobEffect.ADD, Effect.HEALTH_BOOST, 0, 500, ambient = true).encode()))
+        assertEquals(24f, again.session.vitals.maxHealth, "Health Boost's hearts come back with it")
+        repeat(500) { again.session.tickEffects() }
+        assertTrue(again.received().has(MobEffect(2, MobEffect.REMOVE, Effect.SPEED).encode()))
     }
 
     /** The data a BlockActorData packet gives a block. */

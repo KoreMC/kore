@@ -233,6 +233,7 @@ import org.koremc.world.Crafter as CrafterMachine
 import org.koremc.world.DISPENSER_SLOTS
 import org.koremc.world.DamageCause
 import org.koremc.world.Dispenser
+import org.koremc.world.EFFECT_KINDS
 import org.koremc.world.EGG_ENTITY
 import org.koremc.world.EMPTY_MAP
 import org.koremc.world.ENCHANTED_HIT_PARTICLES
@@ -703,6 +704,7 @@ private const val SPAWN_PITCH = 0f
 
 /** The game's names for a player's health and hunger, as attributes. */
 private const val HEALTH = "minecraft:health"
+private const val ABSORPTION = "minecraft:absorption"
 private const val FOOD = "minecraft:player.hunger"
 private const val SATURATION = "minecraft:player.saturation"
 private const val EXHAUSTION = "minecraft:player.exhaustion"
@@ -3851,6 +3853,7 @@ class Session(
         send(*playerState(), commands.map.availableTo(permission), SetTime(world.time), *weatherNow())
         spawnPoint?.let { send(SetSpawnPosition(SetSpawnPosition.PLAYER, it)) }
         showSavedItems()
+        showSavedEffects()
         log.info("{} joined the game", player?.displayName)
         announceJoin()
     }
@@ -4418,7 +4421,7 @@ class Session(
     /** The player's health and absorption, as their client shows them: in whole half hearts, rounded up, as the game shows them. */
     private fun healthAttributes() = listOf(
         Attribute(HEALTH, 0f, vitals.maxHealth, ceil(vitals.health), default = MAX_HEALTH),
-        Attribute("minecraft:absorption", 0f, Float.MAX_VALUE, ceil(vitals.absorption), default = 0f),
+        Attribute(ABSORPTION, 0f, Float.MAX_VALUE, ceil(vitals.absorption), default = 0f),
     )
 
     private fun sendHealth() {
@@ -4664,12 +4667,27 @@ class Session(
             .putList("Attributes", NbtType.COMPOUND, savedAttributes())
             .putShort("Air", vitals.air.coerceAtLeast(0).toShort())
             .putShort("Fire", vitals.fireTicks.toShort())
+            .putList("ActiveEffects", NbtType.COMPOUND, savedEffects())
             .build()
     }
 
-    /** The player's health and hunger, as the game saves them among their attributes. */
+    /** The player's effects, as the game saves them, each lasting as long on every difficulty. */
+    private fun savedEffects(): List<NbtMap> = effects.all.entries.sortedBy { it.key }.map { (effect, on) ->
+        NbtMap.builder()
+            .putByte("Id", effect.toByte())
+            .putByte("Amplifier", on.amplifier.toByte())
+            .putInt("Duration", on.ticksLeft)
+            .putInt("DurationEasy", on.ticksLeft).putInt("DurationNormal", on.ticksLeft).putInt("DurationHard", on.ticksLeft)
+            .putBoolean("Ambient", on.ambient)
+            .putBoolean("ShowParticles", on.particles)
+            .putBoolean("DisplayOnScreenTextureAnimation", false)
+            .build()
+    }
+
+    /** The player's health, absorption and hunger, as the game saves them among their attributes. */
     private fun savedAttributes(): List<NbtMap> = listOf(
-        savedAttribute(HEALTH, vitals.health, MAX_HEALTH, MAX_HEALTH),
+        savedAttribute(HEALTH, vitals.health, MAX_HEALTH, vitals.maxHealth),
+        savedAttribute(ABSORPTION, vitals.absorption, 0f, Float.MAX_VALUE),
         savedAttribute(FOOD, hunger.food.toFloat(), MAX_FOOD.toFloat(), MAX_FOOD.toFloat()),
         savedAttribute(SATURATION, hunger.saturation, MAX_FOOD.toFloat(), MAX_FOOD.toFloat()),
         savedAttribute(EXHAUSTION, hunger.exhaustion, 0f, SHOWN_MAX_EXHAUSTION),
@@ -4705,19 +4723,49 @@ class Session(
         }
         experience = PlayerExperience(data.getInt("PlayerLevel", 0).coerceAtLeast(0), data.getFloat("PlayerLevelProgress", 0f).coerceIn(0f, 1f))
         if (listOf("SpawnX", "SpawnY", "SpawnZ").all(data::containsKey)) spawnPoint = BlockPos(data.getInt("SpawnX"), data.getInt("SpawnY"), data.getInt("SpawnZ"))
+        restoreEffects(data.getList("ActiveEffects", NbtType.COMPOUND, emptyList()))
         val attributes = data.getList("Attributes", NbtType.COMPOUND, emptyList()).associateBy { it.getString("Name") }
-        attributes[HEALTH]?.let { vitals.health = it.getFloat("Current", MAX_HEALTH).coerceIn(0f, MAX_HEALTH) }
+        attributes[HEALTH]?.let { vitals.health = it.getFloat("Current", MAX_HEALTH).coerceIn(0f, vitals.maxHealth) }
+        attributes[ABSORPTION]?.let { vitals.absorption = it.getFloat("Current", 0f).coerceAtLeast(0f) }
         attributes[FOOD]?.let { hunger.food = it.getFloat("Current", MAX_FOOD.toFloat()).toInt().coerceIn(0, MAX_FOOD) }
         attributes[SATURATION]?.let { hunger.saturation = it.getFloat("Current", STARTING_SATURATION).coerceIn(0f, hunger.food.toFloat()) }
         attributes[EXHAUSTION]?.let { hunger.exhaustion = it.getFloat("Current", 0f).coerceIn(0f, SHOWN_MAX_EXHAUSTION) }
         // Health saved as none is a player who left dead, back as if they'd respawned.
         if (vitals.isDead) {
+            effects.clear()
+            vitals.maxHealth = MAX_HEALTH
             vitals.reset()
             hunger.reset()
         }
         vitals.air = data.getShort("Air", PLAYER_MAX_AIR).toInt().coerceIn(0, PLAYER_MAX_AIR.toInt())
         vitals.fireTicks = data.getShort("Fire", 0).toInt().coerceAtLeast(0)
         log.debug("{} picks up at {}, in {}", player?.displayName, position, gameMode)
+    }
+
+    /**
+     * Puts back the effects the player had, [saved], for as long as they
+     * had left of each, but any Kore doesn't know or that had run out. Health
+     * Boost gives them back the hearts it adds, for their health to fill.
+     */
+    private fun restoreEffects(saved: List<NbtMap>) {
+        val known = EFFECT_KINDS.map { it.id }.toSet()
+        for (effect in saved) {
+            val id = effect.getByte("Id").toInt()
+            val ticks = effect.getInt("Duration", 0)
+            if (id !in known || (ticks <= 0 && ticks != INFINITE_EFFECT)) continue
+            val amplifier = effect.getByte("Amplifier").toInt() and 0xFF
+            effects.set(EffectLevel(id, amplifier), ticks, effect.getBoolean("ShowParticles", true), effect.getBoolean("Ambient"))
+        }
+        effects[Effect.HEALTH_BOOST]?.let { vitals.maxHealth = MAX_HEALTH + BOOST_PER_LEVEL * (it.amplifier + 1) }
+    }
+
+    /** Shows the client the effects the player had when they were last saved, which it starts out without. */
+    private fun showSavedEffects() {
+        if (effects.all.isEmpty()) return
+        val shown = effects.all.entries.sortedBy { it.key }.map { (effect, on) ->
+            MobEffect(entityId, MobEffect.ADD, effect, on.amplifier, on.ticksLeft, on.ambient, particles = on.particles)
+        }
+        send(*shown.toTypedArray(), visibleEffects())
     }
 
     /** Shows the client the items the player had when they were last saved, which it starts out without. */
