@@ -56,6 +56,8 @@ enum class ActorFlag(val bit: Int) {
     /** A trident thrown with an enchantment, which shines, and one flying back to whoever threw it, by its Loyalty. */
     ENCHANTED(52),
     RETURN_TRIDENT(53),
+    /** Spinning, launched by Riptide, which hurts whoever the actor spins into. */
+    DAMAGE_NEARBY_MOBS(56),
     SWIMMING(57),
     /** Holding up a shield. */
     BLOCKING(72),

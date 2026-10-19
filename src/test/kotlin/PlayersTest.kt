@@ -59,6 +59,7 @@ import org.koremc.registry.ItemStacks
 import org.koremc.registry.ItemVersion
 import org.koremc.registry.LOYALTY
 import org.koremc.registry.MULTISHOT
+import org.koremc.registry.RIPTIDE
 import org.koremc.registry.THORNS
 import org.koremc.registry.WIND_BURST
 import org.koremc.registry.damage
@@ -95,6 +96,8 @@ private const val MOB_ARMOR_EQUIPMENT = 32
 
 /** The input flag set on every tick a player sneaks. */
 private const val SNEAKING = 8
+private const val START_SPIN_ATTACK = 56
+private const val STOP_SPIN_ATTACK = 57
 
 /** The network IDs of the diamond sword and iron axe the tests hit with. */
 private const val SWORD = 4
@@ -194,8 +197,8 @@ class PlayersTest {
         /** Every packet the client got since the last look. */
         fun received(): List<ByteArray> = sent.flatMap { batches.decode(it) }.also { sent.clear() }
 
-        /** Moves the player's eyes to [position], looking the way [pitch] and [yaw] say, with the input flags numbered in [inputs]. */
-        fun moves(position: Vec3, pitch: Float = 0f, yaw: Float = 0f, inputs: List<Int> = emptyList()) = sends(
+        /** Moves the player's eyes to [position], looking the way [pitch] and [yaw] say, with the input flags numbered in [inputs], moving [delta] on. */
+        fun moves(position: Vec3, pitch: Float = 0f, yaw: Float = 0f, inputs: List<Int> = emptyList(), delta: Vec3 = Vec3(0f, 0f, 0f)) = sends(
             ByteBufUtil.getBytes(
                 Unpooled.buffer()
                     .writeVarUInt(144)
@@ -203,7 +206,7 @@ class PlayersTest {
                     .writeZero(8).writeFloatLE(yaw) // Move vector, then head yaw
                     .writeVarUInt(inputs.size).apply { inputs.forEach { writeVarInt(it) } }
                     .writeVarUInt(1).writeVarUInt(0).writeVarInt(1).writeZero(8)
-                    .writeVarULong(100).writeZero(12).writeZero(5).writeZero(28),
+                    .writeVarULong(100).writeFloatLE(delta.x).writeFloatLE(delta.y).writeFloatLE(delta.z).writeZero(5).writeZero(28),
             ),
         )
 
@@ -644,6 +647,36 @@ class PlayersTest {
         assertTrue(world.projectiles.isEmpty())
         assertEquals("minecraft:trident", steve.session.heldStack?.item?.name)
     }
+
+    @Test
+    fun `a Riptide spin hurts whoever it ends on, as a hit with the trident that their shield doesn't stop, and others see it spin`() {
+        val steve = Client(1, "Steve", "1111")
+        val alex = Client(2, "Alex", "2222")
+        alex.session.give(ItemStack(shield))
+        // Facing south, toward Steve, behind his shield.
+        alex.moves(Vec3(0.5f, -61.38f, 0.5f), yaw = 0f, inputs = listOf(SNEAKING))
+        steve.session.give(ItemStack(trident).withEnchantments(listOf(EnchantmentLevel(RIPTIDE, 3))))
+        steve.moves(Vec3(8.5f, -61.38f, 2.5f))
+        tick()
+        repeat(10) { alex.session.tickHealth() }
+
+        // A spin that ends with nobody in the way hurts nobody.
+        steve.moves(Vec3(8.5f, -61.38f, 2.5f), inputs = listOf(START_SPIN_ATTACK), delta = Vec3(0f, 0f, -1.6f))
+        tick()
+        assertTrue(alex.received().any { it.contentEquals(SetActorData(1, listOf(flagsItem(shownFlags(ActorFlag.DAMAGE_NEARBY_MOBS)), FloatItem(ActorDataId.HEIGHT, 1.8f))).encode()) })
+        steve.moves(Vec3(8.5f, -61.38f, 2.82f), inputs = listOf(STOP_SPIN_ATTACK), delta = Vec3(0f, 0f, 0.29f))
+        assertEquals(20f, alex.session.vitals.health)
+
+        // Heading at Alex from two blocks south, Steve's client bounces back off him.
+        steve.moves(Vec3(0.5f, -61.38f, 2.5f), inputs = listOf(START_SPIN_ATTACK), delta = Vec3(0f, 0f, -1.6f))
+        steve.moves(Vec3(0.5f, -61.38f, 2.82f), inputs = listOf(STOP_SPIN_ATTACK), delta = Vec3(0f, 0f, 0.29f))
+        assertEquals(11f, alex.session.vitals.health)
+        assertEquals(1, steve.session.heldStack?.damage)
+    }
+
+    /** A player's flags as others see them, standing, with [extra]. */
+    private fun shownFlags(vararg extra: ActorFlag) =
+        setOf(ActorFlag.BREATHING, ActorFlag.HAS_GRAVITY, ActorFlag.HAS_COLLISION, ActorFlag.CAN_CLIMB, ActorFlag.SHOW_NAME, ActorFlag.ALWAYS_SHOW_NAME) + extra
 
     @Test
     fun `an arrow stuck in a block is picked up, but gives an arrow back only if it was used up shooting it`() {

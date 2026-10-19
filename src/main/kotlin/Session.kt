@@ -1074,6 +1074,10 @@ class Session(
     /** When the player raised the shield they hold up, in [aliveTicks], while they hold it up. */
     private var shieldRaisedAt: Int? = null
 
+    /** Whether the player's spinning, launched by Riptide, and where their feet were and how they were moving the tick before, which a spin ends on. */
+    private var spinning = false
+    private var heading: Pair<Vec3, Vec3>? = null
+
     /** The food and saturation the client last heard the player has. */
     private var shownHunger = MAX_FOOD to STARTING_SATURATION
 
@@ -1389,6 +1393,7 @@ class Session(
         // Until the client has moved its player where a teleport put them, it reports where they were.
         teleportedTo?.let { to ->
             if (InputFlag.HANDLED_TELEPORT !in packet.inputs && !reported.within(TELEPORT_SLACK, to)) {
+                heading = null
                 onInputs(packet)
                 return
             }
@@ -1396,6 +1401,7 @@ class Session(
         }
         val fellFrom = feet.y
         val from = position
+        heading = feet to delta
         position = reported
         delta = packet.delta
         if (pistonWatch > 0) {
@@ -1504,8 +1510,8 @@ class Session(
         if (InputFlag.START_GLIDING in inputs) gliding = true
         if (InputFlag.STOP_GLIDING in inputs) gliding = false
         if (InputFlag.START_JUMPING in inputs) exhaust(if (sprinting) SPRINT_JUMP_EXHAUSTION else JUMP_EXHAUSTION)
-        if (InputFlag.START_SPIN_ATTACK in inputs) log.debug("{} started spinning", name)
-        if (InputFlag.STOP_SPIN_ATTACK in inputs) log.debug("{} stopped spinning", name)
+        if (InputFlag.START_SPIN_ATTACK in inputs) startSpinning()
+        if (InputFlag.STOP_SPIN_ATTACK in inputs && spinning) stopSpinning()
         if (InputFlag.START_SPRINTING in inputs) {
             sprinting = true
             sneaking = false
@@ -1543,6 +1549,7 @@ class Session(
             ActorFlag.BREATHING.takeIf { breathing }, ActorFlag.SPRINTING.takeIf { sprinting }, ActorFlag.SNEAKING.takeIf { sneaking },
             ActorFlag.ON_FIRE.takeIf { vitals.fireTicks > 0 }, ActorFlag.SWIMMING.takeIf { swimming }, ActorFlag.GLIDING.takeIf { gliding },
             ActorFlag.USING_ITEM.takeIf { eating != null || drawing != null || loading != null }, ActorFlag.BLOCKING.takeIf { shieldRaisedAt != null },
+            ActorFlag.DAMAGE_NEARBY_MOBS.takeIf { spinning },
         )
 
     /** Whether the player breathes, rather than holding their breath underwater. */
@@ -2215,8 +2222,8 @@ class Session(
      * they let go too soon, it flies from a little below their eyes, the way
      * they look, worn a use, leaving their hand, but in creative, where it
      * stays. A trident with Riptide isn't thrown, but launches them, in
-     * water or rain, which their client does itself. Everyone around hears
-     * it.
+     * water or rain, which their client does itself, and wears it nothing,
+     * as it does in Java. Everyone around hears it.
      */
     private fun throwTrident(drawn: Drawing) {
         val held = inventory.items[drawn.slot]?.takeIf { drawn.slot == heldSlot && it.stack.item.name == TRIDENT } ?: return
@@ -2224,7 +2231,6 @@ class Session(
         val riptide = held.stack.levelOf(RIPTIDE)
         if (riptide > 0) {
             if (!inWaterOrRain) return
-            if (!creative) wearHeld(1, unforeseen = true)
             showAround(position.toBlockPos(), LevelSoundEvent(LevelSoundEvent.TRIDENT_RIPTIDE[minOf(riptide, 3) - 1], position, -1))
             log.debug("{} spun off by Riptide {}", name, riptide)
             return
@@ -3540,12 +3546,14 @@ class Session(
         val onFire: Boolean,
         val eating: Boolean,
         val shieldUp: Boolean,
+        /** Whether they spin, launched by Riptide. */
+        val spinning: Boolean,
     )
 
     private fun look() = Look(
         position, pitch, yaw, headYaw, onGround, sneaking, sprinting, swimming, gliding, heldSlot, inventory.items[heldSlot]?.stack,
         inventory.offhand[0]?.stack, inventory.armour.contents().map { it?.stack }, effects.visible(), effects[Effect.INVISIBILITY] != null,
-        vitals.fireTicks > 0, eating != null || drawing != null || loading != null, shieldRaisedAt != null,
+        vitals.fireTicks > 0, eating != null || drawing != null || loading != null, shieldRaisedAt != null, spinning,
     )
 
     /**
@@ -3590,7 +3598,7 @@ class Session(
                 packets += MovePlayer(other.entityId, now.position, now.pitch, now.yaw, now.headYaw, now.onGround)
             }
             if (now.sneaking != before.sneaking || now.sprinting != before.sprinting || now.swimming != before.swimming || now.gliding != before.gliding ||
-                now.invisible != before.invisible || now.onFire != before.onFire || now.eating != before.eating
+                now.invisible != before.invisible || now.onFire != before.onFire || now.eating != before.eating || now.spinning != before.spinning
             ) {
                 packets += SetActorData(other.entityId, listOf(flagsItem(shownFlags(now)), FloatItem(ActorDataId.HEIGHT, heightOf(now))))
             }
@@ -3641,7 +3649,7 @@ class Session(
     private fun shownFlags(look: Look) = PLAYER_FLAGS + ActorFlag.SHOW_NAME + ActorFlag.ALWAYS_SHOW_NAME +
         listOfNotNull(ActorFlag.SPRINTING.takeIf { look.sprinting }, ActorFlag.SNEAKING.takeIf { look.sneaking }, ActorFlag.INVISIBLE.takeIf { look.invisible }, ActorFlag.ON_FIRE.takeIf { look.onFire },
             ActorFlag.SWIMMING.takeIf { look.swimming }, ActorFlag.GLIDING.takeIf { look.gliding }, ActorFlag.USING_ITEM.takeIf { look.eating },
-            ActorFlag.BLOCKING.takeIf { look.shieldUp },
+            ActorFlag.BLOCKING.takeIf { look.shieldUp }, ActorFlag.DAMAGE_NEARBY_MOBS.takeIf { look.spinning },
         )
 
     private fun heightOf(look: Look) = when {
@@ -4028,6 +4036,11 @@ class Session(
         val target = viewers().find { it.entityId == use.target && it !== this && it.isInGame && !it.dead } ?: return
         val reach = if (gameMode == GameMode.CREATIVE) CREATIVE_ATTACK_REACH else ATTACK_REACH
         if (use.target !in shownPlayers || eyes().distanceTo(target.feet) > reach) return
+        strike(target)
+    }
+
+    /** The player's hit on [target], as [attack] has it, but a hit from a spin, [spun], which no shield stops. */
+    private fun strike(target: Session, spun: Boolean = false) {
         // Hitting lowers the player's own shield, which takes as long to block again as raising it did.
         if (shieldRaisedAt != null) shieldRaisedAt = aliveTicks
         val held = heldStack
@@ -4039,7 +4052,7 @@ class Session(
         val impaling = if (target.inWaterOrRain) impalingDamage(held?.levelOf(IMPALING) ?: 0) else 0f
         val damage = withStrength(attackDamage(held), effects.level(Effect.STRENGTH), effects.level(Effect.WEAKNESS)) + sharpness + impaling +
             (fallen?.let { smashDamage(it, held?.levelOf(DENSITY) ?: 0) } ?: 0f)
-        if (target.blocks(feet, held, if (crit) critical(damage) else damage)) {
+        if (!spun && target.blocks(feet, held, if (crit) critical(damage) else damage)) {
             // Fire Aspect sets them burning all the same, and the shield knocks the player back.
             held?.levelOf(FIRE_ASPECT)?.takeIf { it > 0 }?.let { target.setOnFire(it * FIRE_ASPECT_TICKS) }
             knockBack(target.feet, extra = 0f)
@@ -4049,7 +4062,10 @@ class Session(
         val hurt = target.hurt(if (crit) critical(damage) else damage, DamageCause.ATTACK, by = this, weapon = held)
         val sound = if (hurt) ATTACK_STRONG else ATTACK_NO_DAMAGE
         showAround(target.feet.toBlockPos(), LevelSoundEvent(sound, target.eyes(), -1, entityType = PLAYER_ENTITY))
-        log.debug("{} hit {} with {}, for {}{}{}", name, target.name, held?.item?.name ?: "their hand", damage, if (crit) ", critically" else "", fallen?.let { ", smashing from $it blocks" }.orEmpty())
+        log.debug(
+            "{} hit {} with {}, for {}{}{}{}", name, target.name, held?.item?.name ?: "their hand", damage, if (crit) ", critically" else "",
+            fallen?.let { ", smashing from $it blocks" }.orEmpty(), if (spun) ", spinning" else "",
+        )
         if (!hurt) return
         fallen?.let { smash(target, it, held) }
         if (crit) viewers().forEach { it.showHit(target.entityId, Animate.CRITICAL_HIT, CRITICAL_HIT_PARTICLES) }
@@ -4060,6 +4076,37 @@ class Session(
         if (!creative && held != null) wearHeld(wearFromHitting(held.item.name), unforeseen = true)
         exhaust(ATTACK_EXHAUSTION)
         target.prick(this)
+    }
+
+    /** The player starting to spin, launched by Riptide, as their client says, with a trident with Riptide in hand. Everyone who sees them sees them spin. */
+    private fun startSpinning() {
+        if ((heldStack?.takeIf { it.item.name == TRIDENT }?.levelOf(RIPTIDE) ?: 0) <= 0) return
+        spinning = true
+        log.debug("{} started spinning", name)
+    }
+
+    /**
+     * The player's spin, launched by Riptide, ending, as their client says.
+     * Their client ends it as it would carry them into someone, and bounces
+     * them back off, itself, telling Kore nothing more, so Kore looks along
+     * the way they were heading the tick before, as their client did: each
+     * player they'd have run into takes their hit, as a hit with what they
+     * hold, which no shield stops, unless combat or projectiles are switched
+     * off, or the pvp rule says no.
+     */
+    private fun stopSpinning() {
+        spinning = false
+        log.debug("{} stopped spinning", name)
+        val (from, along) = heading ?: return
+        if (!world.features.combat || !world.features.projectiles || !world.rules.pvp || dead || gameMode == GameMode.SPECTATOR) return
+        val start = Box.of(from, PLAYER_WIDTH, PLAYER_HEIGHT)
+        val end = Box.of(Vec3(from.x + along.x, from.y + along.y, from.z + along.z), PLAYER_WIDTH, PLAYER_HEIGHT)
+        val swept = Box(DoubleArray(3) { minOf(start.min[it], end.min[it]) }, DoubleArray(3) { maxOf(start.max[it], end.max[it]) }).grown(SPIN_SLACK)
+        val struck = viewers().filter { it !== this && it.isInGame && !it.dead && it.gameMode != GameMode.SPECTATOR && it.entityId in shownPlayers && it.hitbox.overlaps(swept) }
+        for (target in struck) {
+            strike(target, spun = true)
+            if (dead) return
+        }
     }
 
     /**
@@ -4465,6 +4512,7 @@ class Session(
         eating = null
         drawing = null
         loading = null
+        spinning = false
         cooldowns.clear()
         if (shieldRaisedAt != null) {
             shieldRaisedAt = null
@@ -4962,6 +5010,9 @@ private const val ARROW_SHAKE_TICKS = 7
 private const val ARROW_PICKUP_DELAY = 5
 private const val ARROW_PICKUP_ACROSS = 1.0
 private const val ARROW_PICKUP_UP = 0.5
+
+/** How far beyond the way a spinning player was heading Kore looks for whoever their client ran into, for where it saw them, in blocks. */
+private const val SPIN_SLACK = 0.3
 
 /** How many bits a snowball or an egg bursts into where it hits. */
 private const val BURST_PARTICLES = 6
