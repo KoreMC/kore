@@ -325,6 +325,19 @@ data class LevelSoundEvent(
         /** Something thrown leaving its thrower's hand, which names them as a player, and an ender pearl taking its thrower away. */
         const val THROW = "throw"
         const val TELEPORT = "teleport"
+
+        /** A bow loosing an arrow, and an arrow hitting something. */
+        const val BOW = "bow"
+        const val BOW_HIT = "bow.hit"
+
+        /** A crossbow starting to load, partway, and loaded, without Quick Charge and with it, and firing. */
+        const val CROSSBOW_LOADING_START = "crossbow.loading.start"
+        const val CROSSBOW_LOADING_MIDDLE = "crossbow.loading.middle"
+        const val CROSSBOW_LOADING_END = "crossbow.loading.end"
+        const val CROSSBOW_QUICK_CHARGE_START = "crossbow.quick_charge.start"
+        const val CROSSBOW_QUICK_CHARGE_MIDDLE = "crossbow.quick_charge.middle"
+        const val CROSSBOW_QUICK_CHARGE_END = "crossbow.quick_charge.end"
+        const val CROSSBOW_SHOOT = "crossbow.shoot"
     }
 }
 

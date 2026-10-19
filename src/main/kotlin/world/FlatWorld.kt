@@ -235,9 +235,9 @@ class FlatWorld(
         fallingEntities.remove(id)
     }
 
-    /** Sets [kind] flying from [position], thrown by the entity [thrower], moving at [velocity]. */
-    fun spawnProjectile(kind: Thrown, thrower: Long, position: Vec3, velocity: Vec3): Projectile =
-        Projectile(newEntityId(), kind, thrower, position, velocity).also { projectileEntities[it.id] = it }
+    /** Sets [kind] flying from [position], thrown or shot by the entity [thrower], moving at [velocity], and for an arrow, shot with [arrow]. */
+    fun spawnProjectile(kind: ProjectileKind, thrower: Long, position: Vec3, velocity: Vec3, arrow: ArrowShot? = null): Projectile =
+        Projectile(newEntityId(), kind, thrower, position, velocity, arrow).also { projectileEntities[it.id] = it }
 
     fun removeProjectile(id: Long) {
         projectileEntities.remove(id)

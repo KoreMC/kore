@@ -14,6 +14,10 @@ enum class ActorDataId(val id: Int) {
     NAME(4),
     /** Whose an actor is, like whoever threw a projectile, by their entity ID. */
     OWNER(5),
+    /** What potion a tipped arrow shows it's tipped with, past the plain potions, as its number and 1, as a byte. */
+    CUSTOM_DISPLAY(18),
+    /** What potion a tipped arrow's tipped with, by its number, as a short. */
+    AUX_VALUE_DATA(36),
     AIR_SUPPLY(7),
     /** How much experience an orb holds, which sets how big it looks. */
     VALUE(15),
@@ -34,6 +38,8 @@ enum class ActorFlag(val bit: Int) {
     ON_FIRE(0),
     SNEAKING(1),
     SPRINTING(3),
+    /** An arrow shot from a bow drawn all the way, which trails sparks. */
+    CRITICAL(13),
     /** Using what it holds, like eating. */
     USING_ITEM(4),
     INVISIBLE(5),

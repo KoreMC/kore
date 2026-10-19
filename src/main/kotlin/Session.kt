@@ -170,13 +170,20 @@ import org.koremc.registry.DENSITY
 import org.koremc.registry.EFFICIENCY
 import org.koremc.registry.FIRE_ASPECT
 import org.koremc.registry.FIRE_PROTECTION
+import org.koremc.registry.FLAME
 import org.koremc.registry.FROST_WALKER
 import org.koremc.registry.Food
 import org.koremc.registry.FoodAction
+import org.koremc.registry.INFINITY
 import org.koremc.registry.ItemStack
 import org.koremc.registry.ItemStacks
 import org.koremc.registry.KNOCKBACK
 import org.koremc.registry.MENDING
+import org.koremc.registry.MULTISHOT
+import org.koremc.registry.PIERCING
+import org.koremc.registry.POWER
+import org.koremc.registry.PUNCH
+import org.koremc.registry.QUICK_CHARGE
 import org.koremc.registry.RESPIRATION
 import org.koremc.registry.THORNS
 import org.koremc.registry.VANISHING
@@ -188,12 +195,15 @@ import org.koremc.registry.mendedBy
 import org.koremc.registry.sameKindAs
 import org.koremc.registry.suspiciousStewEffect
 import org.koremc.registry.worn
+import org.koremc.world.ARROW_DAMAGE
 import org.koremc.world.ATTACK_EXHAUSTION
+import org.koremc.world.ArrowShot
 import org.koremc.world.BARREL
 import org.koremc.world.BARREL_OPEN
 import org.koremc.world.BEACON_INTERVAL
 import org.koremc.world.BONE_MEAL
 import org.koremc.world.BOOK_PUT
+import org.koremc.world.BOW_SPEED
 import org.koremc.world.BREAK_EXHAUSTION
 import org.koremc.world.BREWING_BOTTLES
 import org.koremc.world.BREWING_FUEL
@@ -211,6 +221,7 @@ import org.koremc.world.CLIMATE_VARIANT
 import org.koremc.world.CLIMATE_VARIANTS
 import org.koremc.world.CRAFTER_SLOTS
 import org.koremc.world.CRITICAL_HIT_PARTICLES
+import org.koremc.world.CROSSBOW_SPEED
 import org.koremc.world.Cartographed
 import org.koremc.world.Changes
 import org.koremc.world.ChunkPos
@@ -231,6 +242,7 @@ import org.koremc.world.FALLING_BLOCK_SIZE
 import org.koremc.world.FILLED_MAP
 import org.koremc.world.FIRE_ASPECT_TICKS
 import org.koremc.world.FIRE_CHARGE
+import org.koremc.world.FLAME_TICKS
 import org.koremc.world.FLINT_AND_STEEL
 import org.koremc.world.FURNACE_FUEL
 import org.koremc.world.FURNACE_INPUT
@@ -263,6 +275,7 @@ import org.koremc.world.MAX_HEALTH
 import org.koremc.world.MAX_OMINOUS_AMPLIFIER
 import org.koremc.world.MAX_Y
 import org.koremc.world.MIN_Y
+import org.koremc.world.MULTISHOT_SPREAD
 import org.koremc.world.Machine
 import org.koremc.world.MapData
 import org.koremc.world.NOTE_SOUND
@@ -276,10 +289,12 @@ import org.koremc.world.PLAYER_SWIMMING_EYE_HEIGHT
 import org.koremc.world.PLAYER_SWIMMING_HEIGHT
 import org.koremc.world.PLAYER_WALK_SPEED
 import org.koremc.world.PLAYER_WIDTH
+import org.koremc.world.PUNCH_PER_LEVEL
 import org.koremc.world.Placer
 import org.koremc.world.PlayerExperience
 import org.koremc.world.Projectile
 import org.koremc.world.ProjectileHit
+import org.koremc.world.ProjectileKind
 import org.koremc.world.REGENERATION_EXHAUSTION
 import org.koremc.world.SHIELD
 import org.koremc.world.SHIELD_COOLDOWN
@@ -299,7 +314,7 @@ import org.koremc.world.Storage
 import org.koremc.world.Surroundings
 import org.koremc.world.THORNS_WEAR
 import org.koremc.world.THROW_SPEED
-import org.koremc.world.Thrown
+import org.koremc.world.TIPPED_SHARE
 import org.koremc.world.Vec3
 import org.koremc.world.Vitals
 import org.koremc.world.WELL_FED
@@ -307,11 +322,13 @@ import org.koremc.world.WRITABLE_BOOK
 import org.koremc.world.WRITTEN_BOOK
 import org.koremc.world.armourOf
 import org.koremc.world.armourWear
+import org.koremc.world.arrowDamage
 import org.koremc.world.attackDamage
 import org.koremc.world.beaconLevel
 import org.koremc.world.bit
 import org.koremc.world.biteCake
 import org.koremc.world.blockPlacedBy
+import org.koremc.world.bowForce
 import org.koremc.world.breakBlock
 import org.koremc.world.breakTicks
 import org.koremc.world.breaksInCreative
@@ -322,6 +339,8 @@ import org.koremc.world.chunksAround
 import org.koremc.world.corner
 import org.koremc.world.critical
 import org.koremc.world.critsWith
+import org.koremc.world.crossbowChargeTicks
+import org.koremc.world.crossbowMiddleTick
 import org.koremc.world.damageAfter
 import org.koremc.world.disablesShields
 import org.koremc.world.dispenserKind
@@ -337,6 +356,7 @@ import org.koremc.world.fillBucket
 import org.koremc.world.fillPortalFrame
 import org.koremc.world.furnaceKind
 import org.koremc.world.goesOnLectern
+import org.koremc.world.grown
 import org.koremc.world.harvests
 import org.koremc.world.hasCandle
 import org.koremc.world.hasGlowBerries
@@ -376,6 +396,7 @@ import org.koremc.world.pistonMotions
 import org.koremc.world.place
 import org.koremc.world.playNote
 import org.koremc.world.potionEffects
+import org.koremc.world.powerDamage
 import org.koremc.world.pressPlates
 import org.koremc.world.putCandleOn
 import org.koremc.world.putOnLectern
@@ -644,6 +665,15 @@ private const val CREATIVE_ATTACK_REACH = 14f
 private const val ATTACK_STRONG = "attack.strong"
 private const val ATTACK_NO_DAMAGE = "attack.nodamage"
 private const val PLAYER_ENTITY = "minecraft:player"
+
+/** A bow, and a crossbow, and what they shoot, as the game names them, and where a loaded crossbow's NBT keeps what it's loaded with. */
+private const val BOW = "minecraft:bow"
+private const val CROSSBOW = "minecraft:crossbow"
+private const val ARROW = "minecraft:arrow"
+private const val CHARGED_ITEM = "chargedItem"
+
+/** How much sooner than it should be loaded a crossbow's client's word that it is is taken, in ticks. */
+private const val CROSSBOW_CHARGE_SLACK = 3
 
 /** The message for a player who died, as `/kill` kills them. */
 private const val DIED = "death.attack.generic"
@@ -1015,6 +1045,18 @@ class Session(
 
     /** When the player can next use an item of each kind with a wait between uses, by the game's name for the kind, in [aliveTicks]. */
     private val cooldowns = HashMap<String, Int>()
+
+    /** The bow the player's drawing, while they hold use down. */
+    private var drawing: Drawing? = null
+
+    /** A bow drawn, or a crossbow loading, in hotbar [slot], since when, in [aliveTicks]. */
+    private class Drawing(val slot: Int, val since: Int)
+
+    /** The crossbow the player's loading, while they hold use down. */
+    private var loading: Drawing? = null
+
+    /** Whether the use the client asked for has already told it what it holds now, which its answer then needn't again. */
+    private var heldShown = false
 
     /** When the player raised the shield they hold up, in [aliveTicks], while they hold it up. */
     private var shieldRaisedAt: Int? = null
@@ -1485,7 +1527,7 @@ class Session(
         listOfNotNull(
             ActorFlag.BREATHING.takeIf { breathing }, ActorFlag.SPRINTING.takeIf { sprinting }, ActorFlag.SNEAKING.takeIf { sneaking },
             ActorFlag.ON_FIRE.takeIf { vitals.fireTicks > 0 }, ActorFlag.SWIMMING.takeIf { swimming }, ActorFlag.GLIDING.takeIf { gliding },
-            ActorFlag.USING_ITEM.takeIf { eating != null }, ActorFlag.BLOCKING.takeIf { shieldRaisedAt != null },
+            ActorFlag.USING_ITEM.takeIf { eating != null || drawing != null || loading != null }, ActorFlag.BLOCKING.takeIf { shieldRaisedAt != null },
         )
 
     /** Whether the player breathes, rather than holding their breath underwater. */
@@ -1988,14 +2030,20 @@ class Session(
      */
     private fun onTransaction(packet: InventoryTransaction, tick: Long? = null) {
         val held = inventory.items[heldSlot]
+        heldShown = false
         when (packet.type) {
             InventoryTransaction.USE_ITEM -> packet.use?.let { onItemUse(it, tick, packet.legacyRequestId) }
-            InventoryTransaction.RELEASE_ITEM -> eating = null
+            InventoryTransaction.RELEASE_ITEM -> {
+                eating = null
+                drawing?.let(::loose)
+                drawing = null
+                loading = null
+            }
             InventoryTransaction.USE_ITEM_ON_ENTITY -> packet.useOnEntity?.takeIf { it.action == ItemUseOnEntity.ATTACK }?.let(::attack)
             InventoryTransaction.NORMAL -> onDropFromSlot(packet.actions)
         }
         val acknowledged = if (packet.legacyRequestId != 0) acknowledge(packet) else emptyList()
-        if (packet.type == InventoryTransaction.USE_ITEM && inventory.items[heldSlot] != held && heldSlot !in acknowledged) send(slotOf(heldSlot))
+        if (packet.type == InventoryTransaction.USE_ITEM && inventory.items[heldSlot] != held && heldSlot !in acknowledged && !heldShown) send(slotOf(heldSlot))
     }
 
     /**
@@ -2070,7 +2118,7 @@ class Session(
      * and an empty locator map a locator map, in creative too. With more than
      * one empty map, the map goes among their items, or drops at their feet
      * if there's no room. Food is eaten, as [eatFrom] has it, by the client's
-     * [tick], and snowballs, eggs and ender pearls are thrown.
+     * [tick], snowballs, eggs and ender pearls are thrown, and a bow drawn.
      */
     private fun useInAir(use: ItemUse, tick: Long?, legacyRequestId: Int) {
         if (use.hotbarSlot in 0 until HOTBAR_SIZE) heldSlot = use.hotbarSlot
@@ -2078,7 +2126,9 @@ class Session(
         if (gameMode == GameMode.SPECTATOR) return
         armourSlotFor(held.stack.item.name)?.let { return putOn(it, held, legacyRequestId) }
         held.stack.item.food?.let { return eatFrom(held, it, tick ?: aliveTicks.toLong()) }
-        Thrown.from(held.stack.item.name)?.let { return throwHeld(it) }
+        ProjectileKind.thrownFrom(held.stack.item.name)?.let { return throwHeld(it) }
+        if (held.stack.item.name == BOW) return draw()
+        if (held.stack.item.name == CROSSBOW) return useCrossbow(held)
         if (held.stack.item.name != EMPTY_MAP) return
         val blank = game.items.of(FILLED_MAP) ?: return
         val map = world.maps.start(floor(position.x).toInt(), floor(position.z).toInt(), showsPlayers = held.stack.aux == LOCATOR)
@@ -2094,7 +2144,7 @@ class Session(
      * waiting to throw another of its kind, as after an ender pearl, which
      * they then wait a moment to throw again. Everyone around hears it.
      */
-    private fun throwHeld(kind: Thrown) {
+    private fun throwHeld(kind: ProjectileKind) {
         if (!world.features.projectiles) return
         val cooldown = kind.cooldown
         if (cooldown != null && (cooldowns[cooldown.category] ?: 0) > aliveTicks) return
@@ -2108,6 +2158,154 @@ class Session(
         if (!creative) inventory.remove(heldSlot)
         showAround(position.toBlockPos(), LevelSoundEvent(LevelSoundEvent.THROW, position, -1, entityType = PLAYER_ENTITY))
         log.debug("{} threw {}", name, kind.name.lowercase())
+    }
+
+    /**
+     * The player starting to draw the bow they hold, unless projectiles are
+     * switched off, or they've no arrow to shoot, outside creative. The
+     * client goes on asking while they hold use down, which doesn't start it
+     * over.
+     */
+    private fun draw() {
+        if (!world.features.projectiles || (!creative && arrowToShoot() == null)) return
+        if (drawing?.slot != heldSlot) drawing = Drawing(heldSlot, aliveTicks)
+    }
+
+    /**
+     * The player using the crossbow they hold, [held], unless projectiles
+     * are switched off: one that's loaded fires, straight away, and one
+     * that isn't starts loading, unless they've no arrow, outside
+     * creative. While it loads, the client goes on asking once each time a
+     * load would have finished, and the first to come once it has, loads
+     * it. Held down after firing, the client starts it loading again a
+     * moment later.
+     */
+    private fun useCrossbow(held: SlotStack) {
+        if (!world.features.projectiles) return
+        if (held.stack.nbt.containsKey(CHARGED_ITEM)) return fireCrossbow(held)
+        val started = loading?.takeIf { it.slot == heldSlot }
+        val quickCharge = held.stack.levelOf(QUICK_CHARGE)
+        if (started == null) {
+            if (!creative && arrowToShoot() == null) return
+            loading = Drawing(heldSlot, aliveTicks)
+            send(SetActorData(entityId, listOf(flagsItem(playerFlags()))))
+            val sound = if (quickCharge > 0) LevelSoundEvent.CROSSBOW_QUICK_CHARGE_START else LevelSoundEvent.CROSSBOW_LOADING_START
+            showAround(position.toBlockPos(), LevelSoundEvent(sound, position, -1))
+        } else if (aliveTicks - started.since >= crossbowChargeTicks(quickCharge) - CROSSBOW_CHARGE_SLACK) {
+            loadCrossbow(held)
+        }
+    }
+
+    /** Sounds the crossbow the player's loading partway through, for everyone around to hear, as Quick Charge has it. Run once a tick. */
+    private fun soundLoading() {
+        val started = loading ?: return
+        val quickCharge = inventory.items[started.slot]?.stack?.levelOf(QUICK_CHARGE) ?: return
+        if (aliveTicks - started.since != crossbowMiddleTick(quickCharge)) return
+        val sound = if (quickCharge > 0) LevelSoundEvent.CROSSBOW_QUICK_CHARGE_MIDDLE else LevelSoundEvent.CROSSBOW_LOADING_MIDDLE
+        showAround(position.toBlockPos(), LevelSoundEvent(sound, position, -1))
+    }
+
+    /**
+     * Loads the crossbow the player holds, [held], with the arrow they'd
+     * shoot, which it uses up, outside creative, where it's a plain arrow if
+     * they have none. The client hears all of it together, and nothing of
+     * what it holds after: the arrow gone, the crossbow loaded, under its
+     * stack's own ID, that it's done charging, and that the player's no
+     * longer using it. Hearing of it otherwise, it takes the crossbow up
+     * again while use is held down, and draws it back again. Everyone around
+     * hears it load.
+     */
+    private fun loadCrossbow(held: SlotStack) {
+        loading = null
+        val loaded = arrowToShoot()
+        val arrow = loaded?.let { (container, slot) -> container[slot] }
+        val ammo = arrow?.stack?.copy(count = 1) ?: game.items.of(ARROW)?.takeIf { creative } ?: return
+        val packets = mutableListOf<ServerPacket>()
+        if (!creative && loaded != null && arrow != null) {
+            val (container, slot, window) = loaded
+            packets += replaceSlot(container, slot, window, arrow.stack.copy(count = arrow.stack.count - 1).takeIf { it.count > 0 })
+        }
+        val charged = NbtMap.builder().putString("Name", ammo.item.name).putByte("Count", 1).putShort("Damage", ammo.aux.toShort()).putByte("WasPickedUp", 0).build()
+        inventory.items[heldSlot] = held.copy(stack = held.stack.copy(nbt = held.stack.nbt.toBuilder().putCompound(CHARGED_ITEM, charged).build()))
+        packets += slotOf(heldSlot)
+        packets += ActorEvent(entityId, ActorEvent.FINISHED_CHARGING_ITEM, 0)
+        packets += SetActorData(entityId, listOf(flagsItem(playerFlags())))
+        send(*packets.toTypedArray())
+        heldShown = true
+        val sound = if (held.stack.levelOf(QUICK_CHARGE) > 0) LevelSoundEvent.CROSSBOW_QUICK_CHARGE_END else LevelSoundEvent.CROSSBOW_LOADING_END
+        showAround(position.toBlockPos(), LevelSoundEvent(sound, position, -1))
+        log.debug("{} loaded their crossbow with {}", name, ammo.item.name)
+    }
+
+    /**
+     * Fires the crossbow the player holds, [held]: its arrow, critical, from
+     * a little below their eyes, the way they look, and with Multishot, two
+     * more either side, which can't be picked up again, and with Piercing,
+     * through as many more as its level. It wears for each arrow, under the
+     * same stack ID, as the use that fired it is answered, and everyone
+     * around hears it.
+     */
+    private fun fireCrossbow(held: SlotStack) {
+        val crossbow = held.stack
+        val ammo = crossbow.nbt.getCompound(CHARGED_ITEM)
+        val potion = ammo.getShort("Damage").toInt().takeIf { it > 0 }?.minus(1)
+        val turns = if (crossbow.levelOf(MULTISHOT) > 0) listOf(0f, -MULTISHOT_SPREAD, MULTISHOT_SPREAD) else listOf(0f)
+        val from = eyes()
+        for (turn in turns) {
+            val look = lookVector(yaw + turn, pitch)
+            val shot = ArrowShot(ARROW_DAMAGE, critical = true, returned = !creative && turn == 0f, potion = potion, piercing = crossbow.levelOf(PIERCING))
+            world.spawnProjectile(
+                ProjectileKind.ARROW, entityId, Vec3(from.x, from.y - ProjectileKind.ARROW.drop, from.z),
+                Vec3(look.x * CROSSBOW_SPEED, look.y * CROSSBOW_SPEED, look.z * CROSSBOW_SPEED), shot,
+            )
+        }
+        val unloaded = crossbow.copy(nbt = crossbow.nbt.toBuilder().apply { remove(CHARGED_ITEM) }.build())
+        val worn = if (creative) unloaded else unloaded.worn(turns.size)
+        inventory.items[heldSlot] = worn?.let { held.copy(stack = it) }
+        if (worn == null) showAround(position.toBlockPos(), LevelSoundEvent(LevelSoundEvent.BREAK, position, -1))
+        showAround(position.toBlockPos(), LevelSoundEvent(LevelSoundEvent.CROSSBOW_SHOOT, position, -1))
+        log.debug("{} fired their crossbow", name)
+    }
+
+    /** Where the arrow the player would shoot is: in their offhand, or else the first slot of their items with one, as its container, slot and window. */
+    private fun arrowToShoot(): Triple<Container, Int, Int>? {
+        if (inventory.offhand[0]?.stack?.item?.name == ARROW) return Triple(inventory.offhand, 0, OFFHAND_WINDOW)
+        val slot = (0 until inventory.items.size).firstOrNull { inventory.items[it]?.stack?.item?.name == ARROW } ?: return null
+        return Triple(inventory.items, slot, INVENTORY_WINDOW)
+    }
+
+    /**
+     * Looses an arrow from the bow the player [drawn], as they let go: from
+     * a little below their eyes, the way they look, as fast as how far they
+     * drew it, unless they let go too soon, or it's left their hand. A bow
+     * drawn all the way shoots a critical arrow. Power makes it hurt more,
+     * Punch knock back further and Flame burn, and Infinity keeps a plain
+     * arrow from being used up, as creative does any, though neither's can
+     * be picked up again. The bow wears, and everyone around hears it.
+     */
+    private fun loose(drawn: Drawing) {
+        val bow = inventory.items[drawn.slot]?.stack?.takeIf { drawn.slot == heldSlot && it.item.name == BOW } ?: return
+        val force = bowForce(aliveTicks - drawn.since) ?: return
+        val loaded = arrowToShoot()
+        val arrow = loaded?.let { (container, slot) -> container[slot] }
+        if (arrow == null && !creative) return
+        val potion = arrow?.stack?.aux?.takeIf { it > 0 }?.minus(1)
+        val spared = creative || (bow.levelOf(INFINITY) > 0 && potion == null)
+        val shot = ArrowShot(
+            ARROW_DAMAGE + powerDamage(bow.levelOf(POWER)), critical = force >= 1f, punch = bow.levelOf(PUNCH), burns = bow.levelOf(FLAME) > 0,
+            returned = !spared, potion = potion,
+        )
+        val look = lookVector(yaw, pitch)
+        val speed = force * BOW_SPEED
+        val from = eyes()
+        world.spawnProjectile(ProjectileKind.ARROW, entityId, Vec3(from.x, from.y - ProjectileKind.ARROW.drop, from.z), Vec3(look.x * speed, look.y * speed, look.z * speed), shot)
+        if (!spared && loaded != null && arrow != null) {
+            val (container, slot, window) = loaded
+            send(replaceSlot(container, slot, window, arrow.stack.copy(count = arrow.stack.count - 1).takeIf { it.count > 0 }))
+        }
+        if (!creative) wearHeld(1, unforeseen = true)
+        showAround(position.toBlockPos(), LevelSoundEvent(LevelSoundEvent.BOW, position, -1))
+        log.debug("{} shot an arrow, at {} force{}", name, force, if (shot.critical) ", critically" else "")
     }
 
     /**
@@ -3099,18 +3297,31 @@ class Session(
         val ids = inView.mapTo(HashSet()) { it.id }
         val packets = shownProjectiles.filter { it !in ids }.map(::RemoveActor).toMutableList<ServerPacket>()
         for (projectile in inView) {
-            packets += if (projectile.id in shownProjectiles) {
-                MoveActorAbsolute(projectile.id, projectile.position, onGround = false)
-            } else {
+            if (projectile.id !in shownProjectiles) {
                 // An egg's climate variant is the egg entity's only property.
                 val properties = listOfNotNull(projectile.kind.climate?.let { 0 to it })
-                AddProjectile(projectile.id, projectile.kind.entity, projectile.thrower, projectile.position, projectile.velocity, properties)
+                packets += AddProjectile(
+                    projectile.id, projectile.kind.entity, projectile.thrower, projectile.position, projectile.velocity, projectile.pitch, projectile.yaw,
+                    flagsOf(projectile), properties, projectile.arrow?.potion,
+                )
+                continue
             }
+            if (!projectile.moved) continue
+            val landed = projectile.stuckIn != null
+            packets += MoveActorAbsolute(projectile.id, projectile.position, onGround = false, teleport = landed, pitch = projectile.pitch, yaw = projectile.yaw)
+            // An arrow that's landed trails no sparks.
+            if (landed && projectile.arrow?.critical == true) packets += SetActorData(projectile.id, listOf(flagsItem(setOf(ActorFlag.HAS_GRAVITY, ActorFlag.CAN_CLIMB) + flagsOf(projectile))))
         }
         shownProjectiles.retainAll(ids)
         shownProjectiles += ids
         if (packets.isNotEmpty()) send(*packets.toTypedArray())
     }
+
+    /** The flags of [projectile]'s own: an arrow's sparks, while it flies, and its fire. */
+    private fun flagsOf(projectile: Projectile) = setOfNotNull(
+        ActorFlag.CRITICAL.takeIf { projectile.arrow?.critical == true && projectile.stuckIn == null },
+        ActorFlag.ON_FIRE.takeIf { projectile.arrow?.burns == true },
+    )
 
     /** Where the player can be hit, as tall as they are now. */
     internal val hitbox: Box get() = Box.of(feet, PLAYER_WIDTH, playerHeight())
@@ -3127,7 +3338,54 @@ class Session(
         if (blocks(projectile.position, weapon = null, damage = 0f)) return
         val fresh = !vitals.inGrace
         val flew = projectile.velocity
-        if (hurt(0f, DamageCause.PROJECTILE, by = thrower) && fresh) knockBack(Vec3(feet.x - flew.x, feet.y, feet.z - flew.z), extra = 0)
+        if (hurt(0f, DamageCause.PROJECTILE, by = thrower) && fresh) knockBack(Vec3(feet.x - flew.x, feet.y, feet.z - flew.z), extra = 0f)
+    }
+
+    /**
+     * The player shot by [arrow], by [shooter]: unless it's another player's
+     * and the pvp rule says no, or their shield covers it, it hurts them by
+     * how fast it went, and if it's their first hurt in a while, knocks them
+     * back the way it flew, the further for Punch. One that burns sets them
+     * burning, and a tipped one gives them a share of its potion's effects.
+     * The Thorns on what they wear may prick whoever shot it. Returns
+     * whether it hurt them: one that didn't bounces off.
+     */
+    internal fun shotBy(arrow: Projectile, shooter: Session?): Boolean {
+        val shot = arrow.arrow ?: return false
+        if (shooter != null && shooter !== this && !world.rules.pvp) return false
+        val flew = arrow.velocity
+        val damage = arrowDamage(shot.damage, sqrt(flew.x * flew.x + flew.y * flew.y + flew.z * flew.z), shot.critical)
+        if (shot.piercing == 0 && blocks(arrow.position, weapon = null, damage)) return false
+        val fresh = !vitals.inGrace
+        if (!hurt(damage, DamageCause.ARROW, by = shooter)) return false
+        if (fresh) knockBack(Vec3(feet.x - flew.x, feet.y, feet.z - flew.z), extra = shot.punch * PUNCH_PER_LEVEL)
+        if (shot.burns) setOnFire(FLAME_TICKS)
+        shot.potion?.let { potion -> potionEffects(potion).forEach { giveEffect(it.level, maxOf(1, it.ticks / TIPPED_SHARE), ambient = false) } }
+        if (shooter != null && shooter !== this && !dead) prick(shooter)
+        return true
+    }
+
+    /**
+     * Picks up the arrows stuck in blocks within the player's reach: one
+     * that was used up shooting it goes among their items, as their arrow,
+     * tipped as it was, as there's room for it, and one spared being used
+     * up, by creative or Infinity, goes, giving them nothing. Those around
+     * see it fly to them. Run once a tick.
+     */
+    fun collectArrows() {
+        if (state != State.IN_GAME || gameMode == GameMode.SPECTATOR || dead) return
+        val reach = hitbox.grown(ARROW_PICKUP_ACROSS, ARROW_PICKUP_UP)
+        for (arrow in world.projectiles.filter { it.stuckIn != null && it.arrow != null && it.stuckFor > ARROW_PICKUP_DELAY }) {
+            if (!reach.overlaps(Box.around(arrow.position))) continue
+            if (arrow.arrow?.returned == true) {
+                val stack = game.items.of(ARROW, aux = arrow.arrow.potion?.plus(1) ?: 0) ?: continue
+                val (slots, left) = inventory.add(stack)
+                if (left > 0) continue
+                send(*slots.map(::slotOf).toTypedArray())
+            }
+            showAround(arrow.position.toBlockPos(), TakeItemActor(arrow.id, entityId))
+            world.removeProjectile(arrow.id)
+        }
     }
 
     /** Takes the player to [at], where an ender pearl they threw landed, which hurts them as a fall does, unless they've died since. */
@@ -3159,7 +3417,7 @@ class Session(
         val armour: List<ItemStack?>,
         /** The effects whose particles show around them. */
         val effects: Long,
-        /** Whether Invisibility hides them, whether they burn, whether they eat, and whether they hold up a shield. */
+        /** Whether Invisibility hides them, whether they burn, whether they eat or draw a bow, and whether they hold up a shield. */
         val invisible: Boolean,
         val onFire: Boolean,
         val eating: Boolean,
@@ -3169,7 +3427,7 @@ class Session(
     private fun look() = Look(
         position, pitch, yaw, headYaw, onGround, sneaking, sprinting, swimming, gliding, heldSlot, inventory.items[heldSlot]?.stack,
         inventory.offhand[0]?.stack, inventory.armour.contents().map { it?.stack }, effects.visible(), effects[Effect.INVISIBILITY] != null,
-        vitals.fireTicks > 0, eating != null, shieldRaisedAt != null,
+        vitals.fireTicks > 0, eating != null || drawing != null || loading != null, shieldRaisedAt != null,
     )
 
     /**
@@ -3664,7 +3922,7 @@ class Session(
         if (target.blocks(feet, held, if (crit) critical(damage) else damage)) {
             // Fire Aspect sets them burning all the same, and the shield knocks the player back.
             held?.levelOf(FIRE_ASPECT)?.takeIf { it > 0 }?.let { target.setOnFire(it * FIRE_ASPECT_TICKS) }
-            knockBack(target.feet, extra = 0)
+            knockBack(target.feet, extra = 0f)
             log.debug("{}'s shield blocked {}'s hit", target.name, name)
             return
         }
@@ -3677,7 +3935,7 @@ class Session(
         if (crit) viewers().forEach { it.showHit(target.entityId, Animate.CRITICAL_HIT, CRITICAL_HIT_PARTICLES) }
         if (sharpness > 0) viewers().forEach { it.showHit(target.entityId, Animate.MAGIC_CRITICAL_HIT, ENCHANTED_HIT_PARTICLES) }
         val knockback = (held?.levelOf(KNOCKBACK) ?: 0) + if (sprinting) 1 else 0
-        if (fresh) target.knockBack(feet, knockback)
+        if (fresh) target.knockBack(feet, knockback * KNOCKBACK_PER_LEVEL)
         held?.levelOf(FIRE_ASPECT)?.takeIf { it > 0 }?.let { target.setOnFire(it * FIRE_ASPECT_TICKS) }
         if (!creative && held != null) wearHeld(wearFromHitting(held.item.name), unforeseen = true)
         exhaust(ATTACK_EXHAUSTION)
@@ -3700,7 +3958,7 @@ class Session(
             if (worn == null) showAround(feet.toBlockPos(), LevelSoundEvent(LevelSoundEvent.BREAK, position, -1))
             showAround(attacker.feet.toBlockPos(), LevelSoundEvent(LevelSoundEvent.THORNS, attacker.position, -1))
             val fresh = !attacker.vitals.inGrace
-            if (attacker.hurt(damage, DamageCause.THORNS, by = this) && fresh) attacker.knockBack(feet, extra = 0)
+            if (attacker.hurt(damage, DamageCause.THORNS, by = this) && fresh) attacker.knockBack(feet, extra = 0f)
             if (attacker.dead) return
         }
     }
@@ -3804,7 +4062,7 @@ class Session(
      * Knockback, and less for the netherite they wear. The client moves its
      * player by it.
      */
-    private fun knockBack(from: Vec3, extra: Int) {
+    private fun knockBack(from: Vec3, extra: Float) {
         var dx = feet.x - from.x
         var dz = feet.z - from.z
         val across = sqrt(dx * dx + dz * dz)
@@ -3813,7 +4071,7 @@ class Session(
             dz /= across
         }
         val kept = 1f - knockbackResistance(inventory.armour.contents().map { it?.stack })
-        val force = (KNOCKBACK_FORCE + extra * KNOCKBACK_PER_LEVEL) * kept
+        val force = (KNOCKBACK_FORCE + extra) * kept
         send(SetActorMotion(entityId, Vec3(dx * force, KNOCKBACK_HEIGHT * kept, dz * force)))
     }
 
@@ -3898,6 +4156,7 @@ class Session(
         if (dead) return
         tickHunger()
         raiseShield()
+        soundLoading()
         if (playerFlags() != flags || vitals.air != air) {
             send(SetActorData(entityId, listOf(flagsItem(playerFlags()), ShortItem(ActorDataId.AIR_SUPPLY, maxOf(vitals.air, 0).toShort()))))
         }
@@ -4083,6 +4342,8 @@ class Session(
         val parameters = listOfNotNull(name, killer, weapon.takeIf { killer != null })
         dead = true
         eating = null
+        drawing = null
+        loading = null
         cooldowns.clear()
         if (shieldRaisedAt != null) {
             shieldRaisedAt = null
@@ -4476,20 +4737,45 @@ internal fun Collection<Session>.flyProjectiles(game: GameData) {
     for (hit in game.world.tickProjectiles(players.associate { it.entityId to it.hitbox })) {
         val projectile = hit.projectile
         val thrower = players.find { it.entityId == projectile.thrower }
-        if (hit is ProjectileHit.Entity) players.find { it.entityId == hit.entityId }?.hitBy(projectile, thrower)
+        val target = (hit as? ProjectileHit.Entity)?.let { struck -> players.find { it.entityId == struck.entityId } }
+        if (projectile.kind == ProjectileKind.ARROW) {
+            // An arrow that hurts its target goes, and one that doesn't bounces off. One that hits a block quivers in it.
+            if (hit is ProjectileHit.Entity) {
+                val hurt = target?.shotBy(projectile, thrower) == true
+                val piercing = projectile.arrow?.piercing ?: 0
+                when {
+                    !hurt -> projectile.bounce()
+                    // A piercing arrow goes on through, as many as its Piercing lets it.
+                    projectile.pierced.size < piercing -> projectile.pierced += hit.entityId
+                    else -> game.world.removeProjectile(projectile.id)
+                }
+            }
+            val sounds = listOf(LevelSoundEvent(LevelSoundEvent.BOW_HIT, hit.at, -1)) + listOfNotNull(ActorEvent(projectile.id, ActorEvent.ARROW_SHAKE, ARROW_SHAKE_TICKS).takeIf { hit is ProjectileHit.Block })
+            showAround(sounds.map { hit.at.toBlockPos() to it })
+            continue
+        }
+        target?.hitBy(projectile, thrower)
         showAround(burst(projectile.kind, hit.at, game).map { hit.at.toBlockPos() to it })
-        if (projectile.kind == Thrown.ENDER_PEARL) thrower?.arriveByPearl(hit.at)
+        if (projectile.kind == ProjectileKind.ENDER_PEARL) thrower?.arriveByPearl(hit.at)
     }
 }
+
+/** How long an arrow quivers as it sticks in a block, in ticks. */
+private const val ARROW_SHAKE_TICKS = 7
+
+/** How long a stuck arrow lies before it can be picked up, in ticks, and how far beyond a player's box they reach it, across and up and down. */
+private const val ARROW_PICKUP_DELAY = 5
+private const val ARROW_PICKUP_ACROSS = 1.0
+private const val ARROW_PICKUP_UP = 0.5
 
 /** How many bits a snowball or an egg bursts into where it hits. */
 private const val BURST_PARTICLES = 6
 
 /** What everyone around sees and hears of [kind] landing [at]: a snowball's puff, an egg smashing, in bits of its own colour, or an ender pearl's flash. */
-private fun burst(kind: Thrown, at: Vec3, game: GameData): List<ServerPacket> = when {
-    kind == Thrown.SNOWBALL -> List(BURST_PARTICLES) { LevelEvent(LevelEvent.PARTICLE_SNOWBALL_POOF, at, 0) }
+private fun burst(kind: ProjectileKind, at: Vec3, game: GameData): List<ServerPacket> = when {
+    kind == ProjectileKind.SNOWBALL -> List(BURST_PARTICLES) { LevelEvent(LevelEvent.PARTICLE_SNOWBALL_POOF, at, 0) }
     kind.egg -> {
-        val egg = (game.items.of(kind.item)?.item?.runtimeId ?: 0) shl Short.SIZE_BITS
+        val egg = (kind.item?.let { game.items.of(it) }?.item?.runtimeId ?: 0) shl Short.SIZE_BITS
         List(BURST_PARTICLES) { LevelEvent(LevelEvent.PARTICLE_ITEM_BREAK, at, egg) }
     }
     else -> listOf(LevelEvent(LevelEvent.PARTICLES_TELEPORT, at, 0), LevelSoundEvent(LevelSoundEvent.TELEPORT, at, -1))
@@ -4774,6 +5060,7 @@ class Sessions(
         game.world.tickOrbs(sessions.values.mapNotNull { it.orbTarget })
         sessions.values.flyProjectiles(game)
         sessions.values.forEach { it.collectItems() }
+        sessions.values.forEach { it.collectArrows() }
         sessions.values.forEach { it.collectOrbs() }
         sessions.values.forEach { it.syncItems() }
         sessions.values.forEach { it.syncOrbs() }

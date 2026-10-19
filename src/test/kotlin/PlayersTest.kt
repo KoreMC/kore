@@ -57,6 +57,7 @@ import org.koremc.registry.ItemDefinition
 import org.koremc.registry.ItemStack
 import org.koremc.registry.ItemStacks
 import org.koremc.registry.ItemVersion
+import org.koremc.registry.MULTISHOT
 import org.koremc.registry.THORNS
 import org.koremc.registry.WIND_BURST
 import org.koremc.registry.damage
@@ -64,12 +65,14 @@ import org.koremc.registry.withCustomName
 import org.koremc.registry.withDamage
 import org.koremc.registry.withEnchantments
 import org.koremc.storage.PlayerSaves
+import org.koremc.world.ArrowShot
 import org.koremc.world.BlockPos
 import org.koremc.world.DamageCause
 import org.koremc.world.Drops
 import org.koremc.world.Features
 import org.koremc.world.FlatWorld
 import org.koremc.world.PLAYER_EYE_HEIGHT
+import org.koremc.world.ProjectileKind
 import org.koremc.world.Vec3
 import java.security.interfaces.ECPublicKey
 import java.util.UUID
@@ -96,9 +99,12 @@ private const val SWORD = 4
 private const val AXE = 5
 private const val MACE = 6
 
-/** The network IDs of the snowball and ender pearl the tests throw. */
+/** The network IDs of the snowball and ender pearl the tests throw, and the bow and arrows they shoot. */
 private const val SNOWBALL = 7
 private const val ENDER_PEARL = 8
+private const val BOW = 9
+private const val ARROW = 10
+private const val CROSSBOW = 11
 
 /** The input flag set on the tick a player lands. */
 private const val VERTICAL_COLLISION = 50
@@ -120,12 +126,15 @@ class PlayersTest {
     private val mace = ItemDefinition("minecraft:mace", MACE, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 501)
     private val snowball = ItemDefinition("minecraft:snowball", SNOWBALL, componentBased = false, ItemVersion.NONE, maxStackSize = 16)
     private val enderPearl = ItemDefinition("minecraft:ender_pearl", ENDER_PEARL, componentBased = false, ItemVersion.NONE, maxStackSize = 16)
+    private val bow = ItemDefinition("minecraft:bow", BOW, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 385)
+    private val arrow = ItemDefinition("minecraft:arrow", ARROW, componentBased = false, ItemVersion.NONE)
+    private val crossbow = ItemDefinition("minecraft:crossbow", CROSSBOW, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 466)
 
     /** What every player had when they last left, or null for players new to the world. */
     private var saved: NbtMap? = null
     private val game = GameData(
         world, emptyList(), org.koremc.protocol.BlockDefinitions(emptyList()), creative, emptyMap(), Drops(emptyList(), creative, palette),
-        items = ItemStacks(listOf(helmet, chestplate, shield, sword, axe, mace, snowball, enderPearl), creative, palette),
+        items = ItemStacks(listOf(helmet, chestplate, shield, sword, axe, mace, snowball, enderPearl, bow, arrow, crossbow), creative, palette),
         players = object : PlayerSaves {
             override fun load(player: UUID) = saved
 
@@ -211,6 +220,14 @@ class PlayersTest {
                     .writeVarInt(1).writeByte(1).writeBlockPos(BlockPos(0, 0, 0)).writeByte(255).writeVarInt(0).writeByte(0).heldItem(held)
                     .writeZero(24) // Where they stood, and where they clicked, which is nowhere
                     .writeVarUInt(0).writeBoolean(false).writeByte(0),
+            ),
+        )
+
+        /** Lets go of the item [held], in hotbar slot 0, after using it, as loosing a drawn bow does. */
+        fun releases(held: Int) = sends(
+            ByteBufUtil.getBytes(
+                Unpooled.buffer().writeVarUInt(30).writeVarInt(0).writeBoolean(false).writeVarUInt(4).writeVarUInt(0)
+                    .writeVarInt(0).writeVarInt(0).heldItem(held).writeZero(12), // Released, from slot 0, where they stood
             ),
         )
 
@@ -466,6 +483,102 @@ class PlayersTest {
         assertEquals(15f, steve.session.vitals.health)
         // His feet where it landed, just above the stone.
         assertEquals(pearl.position.y + PLAYER_EYE_HEIGHT, steve.session.position.y, 0.001f)
+    }
+
+    @Test
+    fun `a bow drawn and let go shoots an arrow as hard as it was drawn, which hurts whoever it hits, and is used up as the bow wears`() {
+        val steve = Client(1, "Steve", "1111")
+        val alex = Client(2, "Alex", "2222")
+        alex.moves(Vec3(8.5f, -61.38f, 0.5f))
+        tick()
+        steve.session.give(ItemStack(bow))
+        steve.session.give(ItemStack(arrow, 2))
+
+        // Steve, at the spawn, draws east, at Alex, for a second, all the way.
+        steve.moves(Vec3(0.5f, -61.38f, 0.5f), yaw = -90f)
+        steve.throws(BOW)
+        repeat(20) { steve.session.tickHealth() }
+        steve.releases(BOW)
+        assertEquals(1, steve.session.clearItems(0) { it.item == arrow })
+        assertEquals(1, steve.session.heldStack?.damage)
+        val shot = world.projectiles.single()
+        assertTrue(shot.arrow!!.critical)
+        repeat(4) { clients.map { it.session }.flyProjectiles(game) }
+
+        assertTrue(shot !in world.projectiles)
+        val lost = 20f - alex.session.vitals.health
+        assertTrue(lost in 6f..10f, "Alex lost $lost")
+        assertTrue(alex.received().any { it.contentEquals(ActorEvent(2, ActorEvent.HURT, DamageCause.ARROW.id).encode()) })
+    }
+
+    @Test
+    fun `a crossbow loads once it's held long enough, fires a critical arrow on the next use, straight away, and loads again held down after`() {
+        val steve = Client(1, "Steve", "1111")
+        val stackId = world.newStackId() + 1
+        steve.session.give(ItemStack(crossbow))
+        steve.session.give(ItemStack(arrow, 2))
+        steve.received()
+
+        // The client asks again each time a load would finish: the first loads it, a second and a quarter on.
+        steve.throws(CROSSBOW)
+        repeat(25) { steve.session.tickHealth() }
+        steve.throws(CROSSBOW)
+        assertTrue(steve.session.heldStack!!.nbt.containsKey("chargedItem"))
+        // Loaded, under the stack's own ID, then done charging, and no longer used, with nothing of it after, so the client
+        // stops drawing it back while use is held down.
+        val loaded = steve.received().map { it.toList() }
+        val slot = loaded.indexOf(InventorySlot(0, steve.session.heldStack, stackId).encode().toList())
+        assertTrue(slot >= 0 && loaded.getOrNull(slot + 1) == ActorEvent(1, ActorEvent.FINISHED_CHARGING_ITEM, 0).encode().toList(), "the crossbow loaded, then done charging")
+        assertEquals(slot, loaded.lastIndexOf(InventorySlot(0, steve.session.heldStack, stackId).encode().toList()), "and not again")
+        assertEquals(1, steve.session.clearItems(0) { it.item == arrow })
+
+        steve.throws(CROSSBOW)
+        val shot = world.projectiles.single()
+        assertTrue(shot.arrow!!.critical)
+        assertFalse(steve.session.heldStack!!.nbt.containsKey("chargedItem"))
+        assertEquals(1, steve.session.heldStack?.damage)
+
+        // Held down still, the client starts loading it again, and it loads.
+        steve.throws(CROSSBOW)
+        repeat(25) { steve.session.tickHealth() }
+        steve.throws(CROSSBOW)
+        assertTrue(steve.session.heldStack!!.nbt.containsKey("chargedItem"))
+
+        // Let go too soon, it doesn't.
+        steve.throws(CROSSBOW)
+        steve.throws(CROSSBOW)
+        repeat(10) { steve.session.tickHealth() }
+        steve.releases(CROSSBOW)
+        steve.throws(CROSSBOW)
+        assertFalse(steve.session.heldStack!!.nbt.containsKey("chargedItem"))
+    }
+
+    @Test
+    fun `a crossbow with Multishot fires three arrows, of which only the middle one gives an arrow back`() {
+        val steve = Client(1, "Steve", "1111")
+        steve.session.give(ItemStack(crossbow).withEnchantments(listOf(EnchantmentLevel(MULTISHOT, 1))))
+        steve.session.give(ItemStack(arrow))
+        steve.throws(CROSSBOW)
+        repeat(25) { steve.session.tickHealth() }
+        steve.throws(CROSSBOW)
+        steve.throws(CROSSBOW)
+
+        assertEquals(listOf(true, false, false), world.projectiles.map { it.arrow!!.returned })
+        assertEquals(3, steve.session.heldStack?.damage)
+    }
+
+    @Test
+    fun `an arrow stuck in a block is picked up, but gives an arrow back only if it was used up shooting it`() {
+        val steve = Client(1, "Steve", "1111")
+        val landed = world.spawnProjectile(ProjectileKind.ARROW, thrower = 9, Vec3(4.5f, -62.5f, 0.5f), Vec3(0f, -1f, 0f), ArrowShot(2f))
+        val spared = world.spawnProjectile(ProjectileKind.ARROW, thrower = 9, Vec3(4.5f, -62.5f, 1f), Vec3(0f, -1f, 0f), ArrowShot(2f, returned = false))
+        repeat(10) { clients.map { it.session }.flyProjectiles(game) }
+
+        // Steve walks up to where they landed.
+        steve.moves(Vec3(4.5f, -61.38f, 0.5f))
+        steve.session.collectArrows()
+        assertEquals(1, steve.session.clearItems(0) { it.item == arrow })
+        assertTrue(landed !in world.projectiles && spared !in world.projectiles)
     }
 
     @Test

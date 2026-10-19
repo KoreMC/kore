@@ -6,6 +6,7 @@ import org.koremc.registry.levelOf
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.random.Random
 
@@ -90,6 +91,34 @@ const val HEAVY_SMASH_FALL = 5f
 /** How much more each level of Density makes a smash hurt for each block fallen. */
 private const val DENSITY_PER_BLOCK = 0.5f
 
+/** The least a bow must be drawn to shoot, in ticks, and the least force it must have then. */
+private const val LEAST_DRAW_TICKS = 3
+private const val LEAST_FORCE = 0.1f
+
+/** How fast an arrow leaves a bow drawn all the way, in blocks a tick, and a crossbow. */
+const val BOW_SPEED = 3f
+const val CROSSBOW_SPEED = 3.15f
+
+/** How long a crossbow takes to load, in ticks, and how much sooner each level of Quick Charge has it loaded. */
+private const val CROSSBOW_CHARGE_TICKS = 25
+private const val QUICK_CHARGE_TICKS = 5
+
+/** How far either way of the middle a crossbow with Multishot shoots its other arrows, in degrees. */
+const val MULTISHOT_SPREAD = 10f
+
+/** How hard a plain arrow hurts at a block a tick, and how much more each level of Power after the first makes it. */
+const val ARROW_DAMAGE = 2f
+private const val POWER_PER_LEVEL = 0.5f
+
+/** How much further each level of Punch knocks back what an arrow hits. */
+const val PUNCH_PER_LEVEL = 0.25f
+
+/** How long a burning arrow sets what it hits burning, in ticks: five seconds. */
+const val FLAME_TICKS = 5 * 20
+
+/** How much of a potion's effects a tipped arrow gives: an eighth of how long the potion's last. */
+const val TIPPED_SHARE = 8
+
 /** How hard [held], or a bare hand, hits, before effects and enchantments. */
 fun attackDamage(held: ItemStack?): Float = held?.let { WEAPON_DAMAGE[it.item.name] } ?: HAND_DAMAGE
 
@@ -173,6 +202,38 @@ fun windBurstLift(level: Int): Float = when (level) {
     1 -> 1.2f
     2 -> 1.75f
     else -> 1.15f + 0.35f * level
+}
+
+/**
+ * How hard a bow drawn for [ticks] shoots, from a tenth up to 1 for all
+ * the way, which takes a second, or null if it's let go too soon to shoot.
+ */
+fun bowForce(ticks: Int): Float? {
+    if (ticks < LEAST_DRAW_TICKS) return null
+    val seconds = ticks / 20f
+    return minOf((seconds * seconds + seconds * 2) / 3, 1f).takeIf { it >= LEAST_FORCE }
+}
+
+/** How long a crossbow with Quick Charge at [level] takes to load, in ticks: a second and a quarter, less a quarter a level. */
+fun crossbowChargeTicks(level: Int) = maxOf(0, CROSSBOW_CHARGE_TICKS - QUICK_CHARGE_TICKS * level)
+
+/** How many ticks into loading a crossbow with Quick Charge at [level] sounds partway: 16 of every 25 it takes. */
+fun crossbowMiddleTick(level: Int) = (crossbowChargeTicks(level) * LOADING_MIDDLE_SHARE).roundToInt()
+
+/** How far through loading a crossbow sounds partway. */
+private const val LOADING_MIDDLE_SHARE = 16f / 25
+
+/** How much harder Power at [level] makes an arrow hurt, at a block a tick. */
+fun powerDamage(level: Int) = if (level > 0) POWER_PER_LEVEL * (level + 1) else 0f
+
+/**
+ * How hard an arrow of [damage] hurts, going at [speed] blocks a tick: its
+ * damage times its speed, rounded up, and if it's [critical], by chance up
+ * to half again and a point more.
+ */
+fun arrowDamage(damage: Float, speed: Float, critical: Boolean, random: Random = Random): Float {
+    val hit = ceil(damage * speed)
+    return if (critical) hit + random.nextInt(hit.toInt() / 2 + 2) else hit
 }
 
 /** How much of a hit's knockback a player wearing [armour] shakes off, from 0 to 1. */

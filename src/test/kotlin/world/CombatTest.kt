@@ -123,6 +123,32 @@ class CombatTest {
     }
 
     @Test
+    fun `a bow draws harder the longer it's drawn, all the way in a second, and shoots nothing let go too soon`() {
+        assertEquals(null, bowForce(2))
+        assertNear(0.1075f, bowForce(3)!!)
+        assertNear(0.4167f, bowForce(10)!!)
+        assertEquals(1f, bowForce(20))
+        assertEquals(1f, bowForce(60))
+    }
+
+    @Test
+    fun `a crossbow loads in a second and a quarter, a quarter sooner for each level of Quick Charge, and sounds 16 ticks of every 25 in`() {
+        assertEquals(listOf(25, 20, 15, 10), (0..3).map(::crossbowChargeTicks))
+        assertEquals(listOf(16, 13, 10, 6), (0..3).map(::crossbowMiddleTick))
+    }
+
+    @Test
+    fun `an arrow hurts by its speed, more for Power, and a critical one by chance up to half again and a point more`() {
+        assertEquals(0f, powerDamage(0))
+        assertEquals(1f, powerDamage(1))
+        assertEquals(3f, powerDamage(5))
+        assertEquals(6f, arrowDamage(2f, 3f, critical = false))
+        val random = Random(1)
+        val critical = List(1000) { arrowDamage(2f, 3f, critical = true, random) }
+        assertTrue(critical.all { it in 6f..10f } && 10f in critical && 6f in critical)
+    }
+
+    @Test
     fun `each piece of netherite takes a tenth of a hit's knockback`() {
         assertNear(0.2f, knockbackResistance(listOf(item("netherite_helmet"), item("diamond_chestplate"), item("netherite_boots"), null)))
         assertEquals(0f, knockbackResistance(listOf(null, null, null, null)))

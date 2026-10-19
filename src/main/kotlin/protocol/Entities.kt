@@ -138,11 +138,13 @@ internal fun ByteBuf.writeRidesNothing(version: GameVersion) {
 }
 
 /**
- * Something thrown appearing to the client: the entity [entityId], of the
- * game's [type], like `minecraft:snowball`, thrown by the entity [thrower],
- * its bottom at [position], moving at [velocity] blocks a tick, with
- * [properties] of its entity set, by their place among its properties,
- * like an egg's climate variant. It's a quarter of a block each way, as an
+ * Something thrown or shot appearing to the client: the entity [entityId],
+ * of the game's [type], like `minecraft:snowball`, thrown by the entity
+ * [thrower], its bottom at [position], moving at [velocity] blocks a tick,
+ * pointing the way [pitch] and [yaw] say, with [flags] of its own, like an
+ * arrow's sparks, and [properties] of its entity set, by their place among
+ * its properties, like an egg's climate variant, and for a tipped arrow,
+ * the [potion] it's tipped with. It's a quarter of a block each way, as an
  * item is.
  */
 data class AddProjectile(
@@ -151,7 +153,11 @@ data class AddProjectile(
     val thrower: Long,
     val position: Vec3,
     val velocity: Vec3,
+    val pitch: Float = 0f,
+    val yaw: Float = 0f,
+    val flags: Set<ActorFlag> = emptySet(),
     val properties: List<Pair<Int, Int>> = emptyList(),
+    val potion: Int? = null,
 ) : VersionedPacket {
     override val id get() = ADD_ACTOR
 
@@ -161,16 +167,18 @@ data class AddProjectile(
         out.writeString(type)
         out.writeVec3(position)
         out.writeVec3(velocity)
-        out.writeFloatLE(0f).writeFloatLE(0f) // Pitch and yaw
-        out.writeFloatLE(0f) // Head yaw
-        out.writeFloatLE(0f) // Body yaw
+        out.writeFloatLE(pitch).writeFloatLE(yaw)
+        out.writeFloatLE(yaw) // Head yaw
+        out.writeFloatLE(yaw) // Body yaw
         out.writeVarUInt(0) // Attributes
         out.writeActorData(
-            listOf(
-                flagsItem(setOf(ActorFlag.HAS_GRAVITY, ActorFlag.CAN_CLIMB)),
+            listOfNotNull(
+                flagsItem(setOf(ActorFlag.HAS_GRAVITY, ActorFlag.CAN_CLIMB) + flags),
                 LongItem(ActorDataId.OWNER, thrower),
                 FloatItem(ActorDataId.WIDTH, ITEM_SIZE),
                 FloatItem(ActorDataId.HEIGHT, ITEM_SIZE),
+                potion?.let { ShortItem(ActorDataId.AUX_VALUE_DATA, it.toShort()) },
+                potion?.takeIf { it > LAST_PLAIN_POTION }?.let { ByteItem(ActorDataId.CUSTOM_DISPLAY, (it + 1).toByte()) },
             ),
         )
         out.writeVarUInt(properties.size)
@@ -203,6 +211,9 @@ data class SyncActorProperty(val type: String, val properties: List<EnumProperty
 /** An entity's property that's one of [values], called [name]. */
 data class EnumProperty(val name: String, val values: List<String>)
 
+/** The last of the potions with no effect of their own, like an awkward potion, which a tipped arrow shows nothing of. */
+private const val LAST_PLAIN_POTION = 4
+
 /** The game's name for lightning bolts, which the sound of their thunder names too. */
 const val LIGHTNING_BOLT = "minecraft:lightning_bolt"
 
@@ -231,14 +242,22 @@ data class TakeItemActor(val itemId: Long, val takerId: Long) : ServerPacket {
  * position is the client's for the entity, which for an item is an
  * eighth of a block above where it lies.
  */
-data class MoveActorAbsolute(val entityId: Long, val position: Vec3, val onGround: Boolean, val teleport: Boolean = false) : ServerPacket {
+data class MoveActorAbsolute(
+    val entityId: Long,
+    val position: Vec3,
+    val onGround: Boolean,
+    val teleport: Boolean = false,
+    val pitch: Float = 0f,
+    val yaw: Float = 0f,
+) : ServerPacket {
     override val id get() = MOVE_ACTOR_ABSOLUTE
 
     override fun encodeBody(out: ByteBuf) {
         out.writeVarULong(entityId)
         out.writeByte((if (onGround) ON_GROUND else 0) or (if (teleport) TELEPORT else 0))
         out.writeVec3(position)
-        out.writeZero(3) // Pitch, yaw and head yaw, a byte each, which an item doesn't have
+        // Pitch, yaw and head yaw, a byte each, of 256 to the turn, which only something that points a way, like an arrow, needs.
+        out.writeByte(angleByte(pitch)).writeByte(angleByte(yaw)).writeByte(angleByte(yaw))
     }
 
     private companion object {
@@ -246,6 +265,9 @@ data class MoveActorAbsolute(val entityId: Long, val position: Vec3, val onGroun
         const val TELEPORT = 0b10
     }
 }
+
+/** [degrees] as a byte, of 256 to the turn. */
+private fun angleByte(degrees: Float) = (degrees * 256 / 360).toInt()
 
 /**
  * The entity [entityId] set moving by [motion], in blocks a tick, as a
@@ -288,6 +310,9 @@ data class ActorEvent(val entityId: Long, val event: Int, val data: Int) : Serve
         /** An entity that died coming back to life, as a player respawning does: it stands up again, whole. */
         const val SPAWN_ALIVE = 18
 
+        /** An arrow quivering as it sticks in a block. The data is for how many ticks. */
+        const val ARROW_SHAKE = 39
+
         /** A Totem of Undying saving an entity: its particles, and for the player it saved, the totem rising before their eyes. */
         const val TALISMAN_ACTIVATE = 65
 
@@ -301,6 +326,9 @@ data class ActorEvent(val entityId: Long, val event: Int, val data: Int) : Serve
 
         /** An item entity's stack changing size, as when items merge. The data is how many it holds now. */
         const val UPDATE_STACK_SIZE = 69
+
+        /** What the player charges, like a crossbow loading, being done charging, which stops them drawing it back again while they hold use down. */
+        const val FINISHED_CHARGING_ITEM = 74
     }
 }
 
