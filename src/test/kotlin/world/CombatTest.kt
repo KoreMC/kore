@@ -7,6 +7,7 @@ import org.koremc.registry.ItemVersion
 import org.koremc.registry.SHARPNESS
 import org.koremc.registry.withEnchantments
 import kotlin.math.abs
+import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -90,6 +91,17 @@ class CombatTest {
         // Facing west, toward negative x.
         assertTrue(shieldCovers(blocker, 90f, Vec3(-2f, 0f, 0f)))
         assertFalse(shieldCovers(blocker, 90f, Vec3(2f, 0f, 1f)))
+    }
+
+    @Test
+    fun `each level of Thorns makes a prick likelier, of anything from 1 to 5`() {
+        val random = Random(1)
+        val pricks = List(10_000) { thornsPrick(3, random) }
+        val share = pricks.count { it != null } / 10_000f
+        assertTrue(share in 0.42f..0.48f, "$share of hits pricked")
+        assertTrue(pricks.filterNotNull().all { it >= 1f && it < 5f })
+        assertEquals(null, thornsPrick(0, random))
+        assertTrue(List(100) { thornsPrick(7, random) }.all { it != null }, "from seven levels, every time")
     }
 
     @Test

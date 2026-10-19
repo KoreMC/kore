@@ -294,6 +294,9 @@ data class LevelSoundEvent(
 
         /** A shield blocking a hit. */
         const val SHIELD_BLOCK = "item.shield.block"
+
+        /** Armour's Thorns pricking whoever hurt its wearer. */
+        const val THORNS = "thorns"
     }
 }
 

@@ -10,9 +10,11 @@ import org.koremc.auth.TestAuthority
 import org.koremc.auth.ecKeyPair
 import org.koremc.protocol.ActorDataId
 import org.koremc.protocol.ActorEvent
+import org.koremc.protocol.ARMOUR_WINDOW
 import org.koremc.protocol.ActorFlag
 import org.koremc.protocol.Animate
 import org.koremc.protocol.BatchCodec
+import org.koremc.protocol.DeathInfo
 import org.koremc.protocol.Disconnect
 import org.koremc.protocol.FloatItem
 import org.koremc.protocol.GameMode
@@ -49,13 +51,16 @@ import org.koremc.registry.AIR
 import org.koremc.registry.BlockPalette
 import org.koremc.registry.BlockState
 import org.koremc.registry.CreativeInventory
+import org.koremc.registry.EnchantmentLevel
 import org.koremc.registry.ItemDefinition
 import org.koremc.registry.ItemStack
 import org.koremc.registry.ItemStacks
 import org.koremc.registry.ItemVersion
+import org.koremc.registry.THORNS
 import org.koremc.registry.damage
 import org.koremc.registry.withCustomName
 import org.koremc.registry.withDamage
+import org.koremc.registry.withEnchantments
 import org.koremc.storage.PlayerSaves
 import org.koremc.world.BlockPos
 import org.koremc.world.DamageCause
@@ -96,7 +101,7 @@ class PlayersTest {
     private val palette = BlockPalette(listOf(BlockState(AIR, NbtMap.EMPTY, version = 18168865), stone))
     private val world = FlatWorld(palette, listOf(stone))
     private val creative = CreativeInventory(emptyList(), emptyList())
-    private val helmet = item("minecraft:iron_helmet", 1)
+    private val helmet = ItemDefinition("minecraft:iron_helmet", 1, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 165)
     private val chestplate = item("minecraft:iron_chestplate", 2)
     private val shield = ItemDefinition("minecraft:shield", 3, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 336)
     private val sword = ItemDefinition("minecraft:diamond_sword", SWORD, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 1561)
@@ -338,6 +343,38 @@ class PlayersTest {
         // Down, it lets the next hit through.
         steve.attacks(2, held = AXE)
         assertEquals(health - 6f, alex.session.vitals.health)
+    }
+
+    @Test
+    fun `armour with Thorns pricks whoever hurts its wearer, knocking them back, wearing for it, and may kill them`() {
+        // Everyone wears a helmet with seven levels of Thorns, which prick every time.
+        val thorny = ItemStack(helmet).withEnchantments(listOf(EnchantmentLevel(THORNS, 7)))
+        saved = NbtMap.builder().putList("Armor", NbtType.COMPOUND, listOf(ItemStacks.nbtOf(thorny, 0))).build()
+        val steve = Client(1, "Steve", "1111")
+        val alex = Client(2, "Alex", "2222")
+        alex.moves(Vec3(2.5f, -61.38f, 0.5f))
+        tick()
+        steve.received()
+        alex.received()
+        val next = world.newStackId()
+
+        steve.attacks(2)
+        // Between 1 and 5, less a little for Steve's own helmet.
+        val pricked = 20f - steve.session.vitals.health
+        assertTrue(pricked > 0.9f && pricked < 5f, "Steve lost $pricked")
+        val got = steve.received()
+        assertTrue(got.any { it.contentEquals(SetActorMotion(1, Vec3(-0.45f, 0.3608f, 0f)).encode()) })
+        assertTrue(got.any { it.contentEquals(ActorEvent(1, ActorEvent.HURT, DamageCause.THORNS.id).encode()) })
+        assertTrue(got.any { it.contentEquals(LevelSoundEvent(LevelSoundEvent.THORNS, steve.session.position, -1).encode()) })
+        // The hit wears Alex's helmet a use, and the prick two more.
+        assertTrue(alex.received().any { it.contentEquals(InventorySlot(0, thorny.withDamage(3), next + 2, ARMOUR_WINDOW).encode()) })
+
+        repeat(10) { steve.session.tickHealth() }
+        repeat(10) { alex.session.tickHealth() }
+        steve.session.vitals.health = 0.5f
+        steve.attacks(2)
+        assertTrue(steve.session.dead)
+        assertTrue(steve.received().any { it.contentEquals(DeathInfo("death.attack.thorns", listOf("Steve", "Alex")).encode()) })
     }
 
     @Test

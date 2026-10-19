@@ -45,8 +45,9 @@ enum class DamageCause(
     SUFFOCATION(4, "death.attack.inWall", armour = false),
     DROWNING(9, "death.attack.drown", armour = false),
     LIGHTNING(24, "death.attack.lightningBolt", armour = true),
-    // A hit from another player, whose name the message has too.
+    // A hit from another player, and a prick from the Thorns of one hit, whose name the message has too.
     ATTACK(2, "death.attack.player", armour = true),
+    THORNS(18, "death.attack.thorns", armour = true),
     MAGIC(14, "death.attack.magic", armour = false),
     WITHER(15, "death.attack.wither", armour = false),
     STARVATION(16, "death.attack.starve", armour = false, resisted = false),

@@ -9,6 +9,7 @@ Each release, newest first, with the client version it's for. What's done since 
 - A Totem of Undying in either hand saves a player from dying, but in the void
 - Shields: sneaking raises one, in either hand, which blocks hits from in front once it's up, wearing for it and knocking the
   attacker back. An axe's hit disables it for five seconds
+- Thorns: each piece of armour with it may prick whoever hurts its wearer, hurting and knocking them back, and wears for it
 - The console no longer shows players dying or respawning, only what they say and the commands they run
 - Players join and respawn facing south, looking straight ahead
 - Kore's own settings are in `kore.jsonc`, so editors take the comments in it. A `kore.json` from 0.1.0 is renamed to it

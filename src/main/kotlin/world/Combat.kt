@@ -7,6 +7,7 @@ import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.sin
+import kotlin.random.Random
 
 /** How hard a bare hand hits, and anything that isn't a weapon or tool: half a heart. */
 private const val HAND_DAMAGE = 1f
@@ -72,6 +73,16 @@ const val SHIELD_DISABLED_TICKS = 5 * 20
 /** The least a hit a shield blocks must do to wear it. */
 private const val SHIELD_WEAR_FROM = 3f
 
+/** How likely each level of Thorns makes a piece of armour prick whoever hurts its wearer. */
+private const val THORNS_CHANCE_PER_LEVEL = 0.15f
+
+/** The least and most a prick of Thorns hurts, which needn't be whole points. */
+private const val THORNS_LEAST = 1f
+private const val THORNS_MOST = 5f
+
+/** How much more a piece of armour wears for each prick of its Thorns. */
+const val THORNS_WEAR = 2
+
 /** How hard [held], or a bare hand, hits, before effects and enchantments. */
 fun attackDamage(held: ItemStack?): Float = held?.let { WEAPON_DAMAGE[it.item.name] } ?: HAND_DAMAGE
 
@@ -121,6 +132,16 @@ fun disablesShields(item: String?) = item?.endsWith("_axe") == true
 fun shieldCovers(blocker: Vec3, yaw: Float, from: Vec3): Boolean {
     val facing = Math.toRadians(yaw.toDouble())
     return -sin(facing) * (from.x - blocker.x) + cos(facing) * (from.z - blocker.z) > 0
+}
+
+/**
+ * How hard a piece of armour with Thorns at [level] pricks whoever just
+ * hurt its wearer, or null if it doesn't this time: it does by chance,
+ * 15% for each level, by anything from 1 to 5.
+ */
+fun thornsPrick(level: Int, random: Random = Random): Float? {
+    if (level <= 0 || random.nextFloat() >= THORNS_CHANCE_PER_LEVEL * level) return null
+    return THORNS_LEAST + random.nextFloat() * (THORNS_MOST - THORNS_LEAST)
 }
 
 /** How much of a hit's knockback a player wearing [armour] shakes off, from 0 to 1. */

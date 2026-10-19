@@ -80,6 +80,7 @@ class Enchantments(val all: List<Enchantment>, val book: ItemDefinition? = null,
 const val PROTECTION = 0
 const val FIRE_PROTECTION = 1
 const val FEATHER_FALLING = 2
+const val THORNS = 5
 const val RESPIRATION = 6
 const val SHARPNESS = 9
 const val KNOCKBACK = 12

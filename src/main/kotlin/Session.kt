@@ -173,6 +173,7 @@ import org.koremc.registry.ItemStacks
 import org.koremc.registry.KNOCKBACK
 import org.koremc.registry.MENDING
 import org.koremc.registry.RESPIRATION
+import org.koremc.registry.THORNS
 import org.koremc.registry.VANISHING
 import org.koremc.registry.customName
 import org.koremc.registry.damage
@@ -205,9 +206,11 @@ import org.koremc.world.SHIELD
 import org.koremc.world.SHIELD_COOLDOWN
 import org.koremc.world.SHIELD_DISABLED_TICKS
 import org.koremc.world.SHIELD_RAISE_TICKS
+import org.koremc.world.THORNS_WEAR
 import org.koremc.world.disablesShields
 import org.koremc.world.shieldCovers
 import org.koremc.world.shieldWear
+import org.koremc.world.thornsPrick
 import org.koremc.world.Cartographed
 import org.koremc.world.Changes
 import org.koremc.world.ChunkPos
@@ -3529,8 +3532,8 @@ class Session(
      * again more if it's critical, struck falling. Everyone around hears it.
      * If it hurts, it knocks the other back, the further for Knockback or a
      * sprint, unless they're still in the grace after their last hurt, and
-     * sets them burning for Fire Aspect; the weapon wears, and the player
-     * tires.
+     * sets them burning for Fire Aspect; the weapon wears, the player tires,
+     * and the Thorns on what the other wears may prick them.
      */
     private fun attack(use: ItemUseOnEntity) {
         if (!world.features.combat || !world.rules.pvp || dead || gameMode == GameMode.SPECTATOR) return
@@ -3565,6 +3568,28 @@ class Session(
         held?.levelOf(FIRE_ASPECT)?.takeIf { it > 0 }?.let { target.setOnFire(it * FIRE_ASPECT_TICKS) }
         if (!creative && held != null) wearHeld(wearFromHitting(held.item.name), unforeseen = true)
         exhaust(ATTACK_EXHAUSTION)
+        target.prick(this)
+    }
+
+    /**
+     * Pricks [attacker], who just hurt the player, with the Thorns on what
+     * the player wears: each piece with it may, by chance, which hurts them
+     * and knocks them back, and wears the piece for it. The grace after the
+     * first prick keeps the rest from hurting more than the hardest of them.
+     * Everyone around hears each.
+     */
+    private fun prick(attacker: Session) {
+        for (slot in 0 until inventory.armour.size) {
+            val piece = inventory.armour[slot] ?: continue
+            val damage = thornsPrick(piece.stack.levelOf(THORNS)) ?: continue
+            val worn = piece.stack.worn(THORNS_WEAR)
+            if (worn != piece.stack) send(replaceSlot(inventory.armour, slot, ARMOUR_WINDOW, worn))
+            if (worn == null) showAround(feet.toBlockPos(), LevelSoundEvent(LevelSoundEvent.BREAK, position, -1))
+            showAround(attacker.feet.toBlockPos(), LevelSoundEvent(LevelSoundEvent.THORNS, attacker.position, -1))
+            val fresh = !attacker.vitals.inGrace
+            if (attacker.hurt(damage, DamageCause.THORNS, by = this) && fresh) attacker.knockBack(feet, extra = 0)
+            if (attacker.dead) return
+        }
     }
 
     /**
