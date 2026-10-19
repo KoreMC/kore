@@ -277,11 +277,11 @@ class ContainersTest {
         )
 
         /** Stands the player with their feet at [feet], moving by [delta], as the client reports where they are each tick. */
-        fun standsAt(feet: Vec3, delta: Vec3 = Vec3(0f, 0f, 0f)) = sends(
+        fun standsAt(feet: Vec3, delta: Vec3 = Vec3(0f, 0f, 0f), pitch: Float = 0f, yaw: Float = 0f) = sends(
             ByteBufUtil.getBytes(
                 Unpooled.buffer()
                     .writeVarUInt(144)
-                    .writeFloatLE(0f).writeFloatLE(0f).writeFloatLE(feet.x).writeFloatLE(feet.y + PLAYER_EYE_HEIGHT).writeFloatLE(feet.z)
+                    .writeFloatLE(pitch).writeFloatLE(yaw).writeFloatLE(feet.x).writeFloatLE(feet.y + PLAYER_EYE_HEIGHT).writeFloatLE(feet.z)
                     .writeZero(8).writeFloatLE(0f) // Move vector, then head yaw
                     .writeVarUInt(0) // No input flags
                     .writeVarUInt(1).writeVarUInt(0).writeVarInt(1).writeZero(8)
@@ -851,16 +851,17 @@ class ContainersTest {
     }
 
     @Test
-    fun `a player who leaves picks up where they left off next time, where they were and looked, with their game mode, items and experience`() {
+    fun `a player who leaves picks up where they left off next time, where they were, with their game mode, items and experience, facing south again`() {
         config = config.copy(gameMode = GameMode.SURVIVAL)
         val steve = Client(1, "Steve", "1111")
         steve.session.give(ItemStack(coal, 5))
-        steve.standsAt(Vec3(10.5f, -63f, 3.5f))
+        steve.standsAt(Vec3(10.5f, -63f, 3.5f), pitch = 30f, yaw = 120f)
         steve.session.leave()
 
         val again = Client(2, "Steve", "1111")
 
         assertEquals(Vec3(10.5f, -63f + PLAYER_EYE_HEIGHT, 3.5f), again.session.position)
+        assertEquals(0f to 0f, again.session.yaw to again.session.pitch, "looking straight ahead, toward positive z")
         assertEquals(ItemStack(coal, 5), again.session.heldStack)
         assertEquals(GameMode.SURVIVAL, again.session.gameMode)
         val alex = Client(3, "Alex", "2222")

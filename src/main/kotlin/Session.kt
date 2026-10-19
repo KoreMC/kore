@@ -623,6 +623,10 @@ private val TOTEM_EFFECTS = listOf(
     EffectLevel(Effect.ABSORPTION, 1) to 5 * 20,
 )
 
+/** Which way a player faces as they join and respawn: south, toward positive z, looking straight ahead. */
+private const val SPAWN_YAW = 0f
+private const val SPAWN_PITCH = 0f
+
 /** The game's names for a player's health and hunger, as attributes. */
 private const val HEALTH = "minecraft:health"
 private const val FOOD = "minecraft:player.hunger"
@@ -3895,8 +3899,8 @@ class Session(
 
     /**
      * Brings the player back to life at the world's spawn, once they've
-     * chosen to respawn and the client is ready: whole again, where everyone
-     * sees them get up again.
+     * chosen to respawn and the client is ready: whole again, facing south
+     * and looking straight ahead, where everyone sees them get up again.
      */
     private fun onRespawn(packet: Respawn) {
         if (!dead || packet.state != Respawn.CLIENT_READY_TO_SPAWN) return
@@ -3907,7 +3911,7 @@ class Session(
         breathing = true
         val eyes = spawnEyes()
         send(Respawn(eyes, Respawn.READY_TO_SPAWN, entityId), *playerState())
-        teleport(Vec3(eyes.x, eyes.y - PLAYER_EYE_HEIGHT, eyes.z), yaw, pitch)
+        teleport(Vec3(eyes.x, eyes.y - PLAYER_EYE_HEIGHT, eyes.z), SPAWN_YAW, SPAWN_PITCH)
         // Anyone still seeing them lie dead sees them get up, and go to where they respawned as players sync. Taking them
         // away and showing them afresh instead, so soon after, loses their skin on some clients, which show them as Steve.
         val look = look()
@@ -4045,16 +4049,16 @@ class Session(
         .putFloat("DefaultMin", 0f).putFloat("DefaultMax", max)
         .build()
 
-    /** Picks up where the player left off last time, as [savedData] kept it, for whatever it kept that Kore can use. */
+    /**
+     * Picks up where the player left off last time, as [savedData] kept it,
+     * for whatever it kept that Kore can use, but which way they looked:
+     * they face south again, looking straight ahead, as they do joining for
+     * the first time.
+     */
     private fun restoreFrom(data: NbtMap) {
         data.getList("Pos", NbtType.FLOAT, emptyList()).takeIf { it.size == 3 }?.let { Vec3(it[0], it[1], it[2]) }?.takeIf { it.isPlausible() }?.let {
             position = it
             viewCentre = it.toBlockPos().chunk
-        }
-        data.getList("Rotation", NbtType.FLOAT, emptyList()).takeIf { it.size == 2 }?.let { (savedYaw, savedPitch) ->
-            yaw = savedYaw
-            headYaw = savedYaw
-            pitch = savedPitch
         }
         GameMode.entries.find { it.id == data.getInt("PlayerGameMode", -1) && it != GameMode.DEFAULT }?.let { gameMode = it }
         heldSlot = data.getInt("SelectedInventorySlot", 0).coerceIn(0, HOTBAR_SIZE - 1)

@@ -1296,9 +1296,11 @@ class SessionTest {
     }
 
     @Test
-    fun `a player killed falls over, drops what they had, is told how they died, and once they choose to, respawns at the spawn`() {
+    fun `a player killed falls over, drops what they had, is told how they died, and once they choose to, respawns at the spawn, facing south`() {
         spawn()
         session.give(ItemStack(hoe))
+        clientSends(playerAuthInput(standing, pitch = -40f, yaw = 120f))
+        assertEquals(120f to -40f, session.yaw to session.pitch)
         sent.clear()
 
         assertTrue(session.kill())
@@ -1314,6 +1316,7 @@ class SessionTest {
         assertTrue(receivedPackets().any { it.contentEquals(Respawn(eyes, Respawn.READY_TO_SPAWN, 7).encode()) })
         assertFalse(session.dead)
         assertEquals(eyes, session.position)
+        assertEquals(0f to 0f, session.yaw to session.pitch, "looking straight ahead, toward positive z")
     }
 
     @Test
@@ -1981,10 +1984,10 @@ class SessionTest {
     }
 
     /** A PlayerAuthInput with the player at [position], the input flags numbered in [inputs] set, and nothing else going on. */
-    private fun playerAuthInput(position: Vec3, inputs: List<Int> = emptyList(), tick: Long = 100) = ByteBufUtil.getBytes(
+    private fun playerAuthInput(position: Vec3, inputs: List<Int> = emptyList(), tick: Long = 100, pitch: Float = 0f, yaw: Float = 0f) = ByteBufUtil.getBytes(
         Unpooled.buffer()
             .writeVarUInt(144)
-            .writeZero(8).writeFloatLE(position.x).writeFloatLE(position.y).writeFloatLE(position.z)
+            .writeFloatLE(pitch).writeFloatLE(yaw).writeFloatLE(position.x).writeFloatLE(position.y).writeFloatLE(position.z)
             .writeZero(12).writeVarUInt(inputs.size).apply { inputs.forEach { writeVarInt(it) } }
             .writeVarUInt(1).writeVarUInt(0).writeVarInt(1).writeZero(8)
             .writeVarULong(tick).writeZero(12).writeZero(5).writeZero(28),
