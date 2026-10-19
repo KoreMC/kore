@@ -52,6 +52,10 @@ private const val NETHERITE_KNOCKBACK_RESISTANCE = 0.1f
 /** How long each level of Fire Aspect sets what's hit burning, in ticks: four seconds. */
 const val FIRE_ASPECT_TICKS = 4 * 20
 
+/** How many sparks fly from a critical hit, and glints from an enchanted weapon's hit. */
+const val CRITICAL_HIT_PARTICLES = 55
+const val ENCHANTED_HIT_PARTICLES = 15
+
 /** How hard [held], or a bare hand, hits, before effects and enchantments. */
 fun attackDamage(held: ItemStack?): Float = held?.let { WEAPON_DAMAGE[it.item.name] } ?: HAND_DAMAGE
 

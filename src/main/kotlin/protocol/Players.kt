@@ -221,7 +221,8 @@ data class MovePlayer(
 
 /**
  * An entity doing something brief that the client animates, like a player
- * swinging their arm. The client sends it when its own player swings, with
+ * swinging their arm, with [data] about it, like how many sparks a hit
+ * throws off. The client sends it when its own player swings, with
  * [swingSource] saying why, like `mine` or `build`, and the server passes
  * it on for everyone else to see.
  */
@@ -239,7 +240,7 @@ data class Animate(val action: Int, val entityId: Long, val data: Float = 0f, va
     companion object {
         const val SWING_ARM = 1
 
-        /** The sparks of a critical hit, around the entity hit, and the glints of an enchanted weapon's hit. */
+        /** The sparks of a critical hit, around the entity hit, and the glints of an enchanted weapon's hit, as many as the data says. */
         const val CRITICAL_HIT = 4
         const val MAGIC_CRITICAL_HIT = 5
     }

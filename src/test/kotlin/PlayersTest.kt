@@ -282,7 +282,7 @@ class PlayersTest {
 
         steve.attacks(2)
         assertEquals(18.5f, alex.session.vitals.health)
-        assertTrue(alex.received().any { it.contentEquals(Animate(Animate.CRITICAL_HIT, 2).encode()) })
+        assertTrue(alex.received().any { it.contentEquals(Animate(Animate.CRITICAL_HIT, 2, 55f).encode()) })
     }
 
     @Test

@@ -198,6 +198,7 @@ import org.koremc.world.BrokenBlock
 import org.koremc.world.CAKE_NUTRITION
 import org.koremc.world.CAKE_SATURATION
 import org.koremc.world.CRAFTER_SLOTS
+import org.koremc.world.CRITICAL_HIT_PARTICLES
 import org.koremc.world.Cartographed
 import org.koremc.world.Changes
 import org.koremc.world.ChunkPos
@@ -206,6 +207,7 @@ import org.koremc.world.DISPENSER_SLOTS
 import org.koremc.world.DamageCause
 import org.koremc.world.Dispenser
 import org.koremc.world.EMPTY_MAP
+import org.koremc.world.ENCHANTED_HIT_PARTICLES
 import org.koremc.world.ENDER_EYE
 import org.koremc.world.Effect
 import org.koremc.world.EffectLevel
@@ -3506,8 +3508,8 @@ class Session(
         showAround(target.feet.toBlockPos(), LevelSoundEvent(sound, target.eyes(), -1, entityType = PLAYER_ENTITY))
         log.debug("{} hit {} with {}, for {}{}", name, target.name, held?.item?.name ?: "their hand", damage, if (crit) ", critically" else "")
         if (!hurt) return
-        if (crit) viewers().forEach { it.showHit(target.entityId, Animate.CRITICAL_HIT) }
-        if (sharpness > 0) viewers().forEach { it.showHit(target.entityId, Animate.MAGIC_CRITICAL_HIT) }
+        if (crit) viewers().forEach { it.showHit(target.entityId, Animate.CRITICAL_HIT, CRITICAL_HIT_PARTICLES) }
+        if (sharpness > 0) viewers().forEach { it.showHit(target.entityId, Animate.MAGIC_CRITICAL_HIT, ENCHANTED_HIT_PARTICLES) }
         val knockback = (held?.levelOf(KNOCKBACK) ?: 0) + if (sprinting) 1 else 0
         if (fresh) target.knockBack(feet, knockback)
         held?.levelOf(FIRE_ASPECT)?.takeIf { it > 0 }?.let { target.setOnFire(it * FIRE_ASPECT_TICKS) }
@@ -3528,9 +3530,13 @@ class Session(
             effects[Effect.LEVITATION] == null
     }
 
-    /** Shows the client the player [entityId] hit, by [action], like the sparks of a critical hit, if it's its own player or one it can see. */
-    private fun showHit(entityId: Long, action: Int) {
-        if (entityId == this.entityId || entityId in shownPlayers) send(Animate(action, entityId))
+    /**
+     * Shows the client the player [entityId] hit, by [action], like the
+     * sparks of a critical hit, as many [particles] of them, if it's its own
+     * player or one it can see.
+     */
+    private fun showHit(entityId: Long, action: Int, particles: Int) {
+        if (entityId == this.entityId || entityId in shownPlayers) send(Animate(action, entityId, particles.toFloat()))
     }
 
     /**
