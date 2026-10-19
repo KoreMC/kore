@@ -2777,13 +2777,14 @@ class Session(
      * Wears the item the player holds [uses] down, as breaking a block with
      * a tool does. One that wears out breaks, which everyone around hears.
      * The client hears what the slot holds once the use that wore it is
-     * answered.
+     * answered, or at once for wear it doesn't foresee, [unforeseen], like a
+     * hit's.
      */
-    private fun wearHeld(uses: Int) {
+    private fun wearHeld(uses: Int, unforeseen: Boolean = false) {
         val held = inventory.items[heldSlot] ?: return
         val worn = held.stack.worn(uses)
         if (worn == held.stack) return
-        inventory.items[heldSlot] = worn?.let { held.copy(stack = it) }
+        if (unforeseen) send(replaceSlot(inventory.items, heldSlot, INVENTORY_WINDOW, worn)) else inventory.items[heldSlot] = worn?.let { held.copy(stack = it) }
         if (worn == null) {
             showAround(position.toBlockPos(), LevelSoundEvent(LevelSoundEvent.BREAK, position, -1))
             log.debug("{}'s {} broke", player?.displayName, held.stack.item.name)
@@ -2856,8 +2857,7 @@ class Session(
         }.randomOrNull() ?: return points
         val there = container[slot]!!
         val (mended, used) = there.stack.mendedBy(points)
-        container[slot] = there.copy(stack = mended)
-        send(InventorySlot(slot, mended, there.id, window))
+        send(replaceSlot(container, slot, window, mended))
         log.debug("{}'s {} was mended to {} damage", player?.displayName, mended.item.name, mended.damage)
         return points - used
     }
@@ -3174,6 +3174,19 @@ class Session(
     /** Shows the client the player [entityId] swinging their arm, for [source], with [hand], or the main one, if it can see them. */
     private fun showSwing(entityId: Long, source: String?, hand: Int? = null) {
         if (entityId in shownPlayers) send(Animate(Animate.SWING_ARM, entityId, swingSource = source, hand = hand))
+    }
+
+    /**
+     * Puts [stack] in [slot] of [container], [window] to the client, changed
+     * from what was there by something the client didn't do or foresee,
+     * like wear, under a new stack ID, and returns what tells the client.
+     * The client takes no notice of a stack it has changing under the ID it
+     * already knows it by.
+     */
+    private fun replaceSlot(container: Container, slot: Int, window: Int, stack: ItemStack?): InventorySlot {
+        val replaced = stack?.let { SlotStack(it, inventory.newStackId()) }
+        container[slot] = replaced
+        return InventorySlot(slot, stack, replaced?.id ?: 0, window)
     }
 
     /** The slot of the player's items numbered [slot], as it is now, for the client. */
@@ -3550,7 +3563,7 @@ class Session(
         val knockback = (held?.levelOf(KNOCKBACK) ?: 0) + if (sprinting) 1 else 0
         if (fresh) target.knockBack(feet, knockback)
         held?.levelOf(FIRE_ASPECT)?.takeIf { it > 0 }?.let { target.setOnFire(it * FIRE_ASPECT_TICKS) }
-        if (!creative && held != null) wearHeld(wearFromHitting(held.item.name))
+        if (!creative && held != null) wearHeld(wearFromHitting(held.item.name), unforeseen = true)
         exhaust(ATTACK_EXHAUSTION)
     }
 
@@ -3585,10 +3598,7 @@ class Session(
         val (container, slot, window) = heldShield() ?: return false
         val shield = container[slot] ?: return false
         val worn = shield.stack.worn(shieldWear(damage))
-        if (worn != shield.stack) {
-            container[slot] = worn?.let { shield.copy(stack = it) }
-            send(InventorySlot(slot, worn, if (worn == null) 0 else shield.id, window))
-        }
+        if (worn != shield.stack) send(replaceSlot(container, slot, window, worn))
         val disabled = disablesShields(weapon?.item?.name)
         showAround(feet.toBlockPos(), LevelSoundEvent(LevelSoundEvent.SHIELD_BLOCK, position, -1))
         if (worn == null || disabled) showAround(feet.toBlockPos(), LevelSoundEvent(LevelSoundEvent.BREAK, position, -1))
@@ -3669,8 +3679,7 @@ class Session(
             val there = inventory.armour[slot]?.takeIf { armourOf(it.stack.item.name).first > 0 } ?: continue
             val worn = there.stack.worn(uses)
             if (worn == there.stack) continue
-            inventory.armour[slot] = worn?.let { there.copy(stack = it) }
-            changed += InventorySlot(slot, worn, if (worn == null) 0 else there.id, ARMOUR_WINDOW)
+            changed += replaceSlot(inventory.armour, slot, ARMOUR_WINDOW, worn)
             if (worn == null) showAround(position.toBlockPos(), LevelSoundEvent(LevelSoundEvent.BREAK, position, -1))
         }
         if (changed.isNotEmpty()) send(*changed.toTypedArray())

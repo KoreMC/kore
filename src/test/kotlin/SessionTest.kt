@@ -1776,10 +1776,10 @@ class SessionTest {
 
         session.collectOrbs()
 
-        // Two uses a point, and none of the three left over.
+        // Two uses a point, and none of the three left over, under a new stack ID, for the client to take notice of.
         val mended = mending.withDamage(4)
         assertEquals(mended, session.heldStack)
-        val expected = listOf(LevelEvent(LevelEvent.SOUND_EXPERIENCE_ORB, standing, 0), InventorySlot(0, mended, stackId = 1))
+        val expected = listOf(LevelEvent(LevelEvent.SOUND_EXPERIENCE_ORB, standing, 0), InventorySlot(0, mended, stackId = 2))
         assertEquals(expected.map { it.encode().toList() }, receivedPackets().map { it.toList() })
     }
 

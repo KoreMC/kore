@@ -16,6 +16,7 @@ import org.koremc.protocol.BatchCodec
 import org.koremc.protocol.Disconnect
 import org.koremc.protocol.FloatItem
 import org.koremc.protocol.GameMode
+import org.koremc.protocol.InventorySlot
 import org.koremc.protocol.LevelSoundEvent
 import org.koremc.protocol.MovePlayer
 import org.koremc.protocol.OFFHAND_WINDOW
@@ -54,6 +55,7 @@ import org.koremc.registry.ItemStacks
 import org.koremc.registry.ItemVersion
 import org.koremc.registry.damage
 import org.koremc.registry.withCustomName
+import org.koremc.registry.withDamage
 import org.koremc.storage.PlayerSaves
 import org.koremc.world.BlockPos
 import org.koremc.world.DamageCause
@@ -261,10 +263,13 @@ class PlayersTest {
         tick()
         steve.session.give(ItemStack(sword))
         alex.received()
+        val next = world.newStackId()
 
         steve.attacks(2, held = SWORD)
         assertEquals(12f, alex.session.vitals.health)
         assertEquals(1, steve.session.heldStack?.damage)
+        // The client doesn't foresee the wear, so it's told, under a new stack ID, which it takes notice of.
+        assertTrue(steve.received().any { it.contentEquals(InventorySlot(0, ItemStack(sword).withDamage(1), next + 1).encode()) })
         val got = alex.received()
         assertTrue(got.any { it.contentEquals(ActorEvent(2, ActorEvent.HURT, DamageCause.ATTACK.id).encode()) })
         assertTrue(got.any { it.contentEquals(SetActorMotion(2, Vec3(0.45f, 0.3608f, 0f)).encode()) })
@@ -296,9 +301,12 @@ class PlayersTest {
         repeat(10) { alex.session.tickHealth() }
         val health = alex.session.vitals.health
         steve.received()
+        alex.received()
+        val next = world.newStackId()
         steve.attacks(2, held = SWORD)
         assertEquals(health, alex.session.vitals.health)
         assertEquals(8, alex.session.heldStack?.damage)
+        assertTrue(alex.received().any { it.contentEquals(InventorySlot(0, ItemStack(shield).withDamage(8), next + 1).encode()) })
         val got = steve.received()
         assertTrue(got.any { it.contentEquals(SetActorMotion(1, Vec3(-0.45f, 0.3608f, 0f)).encode()) })
         assertTrue(got.any { it.contentEquals(LevelSoundEvent(LevelSoundEvent.SHIELD_BLOCK, alex.session.position, -1).encode()) })

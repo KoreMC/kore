@@ -12,6 +12,7 @@ Each release, newest first, with the client version it's for. What's done since 
 - The console no longer shows players dying or respawning, only what they say and the commands they run
 - Players join and respawn facing south, looking straight ahead
 - Kore's own settings are in `kore.jsonc`, so editors take the comments in it. A `kore.json` from 0.1.0 is renamed to it
+- Armour worn by a hurt, and items Mending repairs, show their new durability at once, not once they're moved
 
 ## 0.1.0
 
