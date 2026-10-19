@@ -77,6 +77,7 @@ import org.koremc.world.ProjectileKind
 import org.koremc.world.Vec3
 import java.security.interfaces.ECPublicKey
 import java.util.UUID
+import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -231,6 +232,15 @@ class PlayersTest {
             ByteBufUtil.getBytes(
                 Unpooled.buffer().writeVarUInt(30).writeVarInt(0).writeBoolean(false).writeVarUInt(4).writeVarUInt(0)
                     .writeVarInt(0).writeVarInt(0).heldItem(held).writeZero(12), // Released, from slot 0, where they stood
+            ),
+        )
+
+        /** Drops the item [held], the one of it in hotbar slot 0, as the drop key does. */
+        fun drops(held: Int) = sends(
+            ByteBufUtil.getBytes(
+                Unpooled.buffer().writeVarUInt(30).writeVarInt(0).writeBoolean(false).writeVarUInt(0).writeVarUInt(2)
+                    .writeVarUInt(2).writeBoolean(false).writeBoolean(true).writeVarUInt(0).writeVarUInt(0).heldItem(0).heldItem(held) // Into the world
+                    .writeVarUInt(0).writeBoolean(true).writeByte(0).writeBoolean(false).writeVarUInt(0).heldItem(held).heldItem(0), // Out of slot 0
             ),
         )
 
@@ -512,6 +522,25 @@ class PlayersTest {
         val lost = 20f - alex.session.vitals.health
         assertTrue(lost in 6f..10f, "Alex lost $lost")
         assertTrue(alex.received().any { it.contentEquals(ActorEvent(2, ActorEvent.HURT, DamageCause.ARROW.id).encode()) })
+    }
+
+    @Test
+    fun `a bow dropped while it's drawn drops as gently as anything, and is drawn no more, back in hand`() {
+        val steve = Client(1, "Steve", "1111")
+        steve.session.give(ItemStack(bow))
+        steve.session.give(ItemStack(arrow, 2))
+        steve.moves(Vec3(0.5f, -61.38f, 0.5f), yaw = -90f)
+        steve.throws(BOW)
+        repeat(20) { steve.session.tickHealth() }
+
+        steve.drops(BOW)
+        val dropped = world.items.single()
+        val speed = dropped.velocity.let { sqrt(it.x * it.x + it.z * it.z) }
+        assertTrue(speed < 0.5f, "it left their hand at $speed blocks a tick")
+
+        steve.session.give(ItemStack(bow))
+        steve.releases(BOW)
+        assertTrue(world.projectiles.isEmpty(), "letting go of the bow they took up again shoots nothing")
     }
 
     @Test

@@ -491,8 +491,8 @@ private const val PISTON_WATCH = 10
 private const val THROWN_PICKUP_DELAY = 40
 
 /** How fast a thrown item leaves the player's hand, in blocks a tick, and the lift it gets. */
-private const val THROW_SPEED = 0.3
-private const val THROW_LIFT = 0.1f
+private const val DROP_SPEED = 0.3
+private const val DROP_LIFT = 0.1f
 
 /** How high above where an item lies the client puts it, an eighth of a block. */
 private const val ITEM_NETWORK_OFFSET = 0.125f
@@ -1980,9 +1980,25 @@ class Session(
     /** Follows the hotbar slot the player holds. The offhand reports its item this way too, and changes nothing. */
     private fun onEquip(packet: MobEquipment) {
         if (packet.windowId != INVENTORY_WINDOW || packet.selectedSlot !in 0 until HOTBAR_SIZE) return
-        // Holding something else stops them eating what they held.
-        if (packet.selectedSlot != heldSlot) eating = null
         heldSlot = packet.selectedSlot
+        // Holding something else stops them using what they held.
+        if (stopUsingWhatsGone()) send(SetActorData(entityId, listOf(flagsItem(playerFlags()))))
+    }
+
+    /**
+     * Stops the player eating, drawing or loading what they no longer hold,
+     * dropped, moved or swapped for something else, which their client lets
+     * go of without a word. Left, they'd be shown still using it, and their
+     * client would take it up again by itself when they next held it.
+     * Returns whether they stopped.
+     */
+    private fun stopUsingWhatsGone(): Boolean {
+        val held = heldStack?.item?.name
+        val was = eating != null || drawing != null || loading != null
+        if (eating?.let { it.slot != heldSlot || it.item != held } == true) eating = null
+        if (drawing?.let { it.slot != heldSlot || (held != BOW && held != TRIDENT) } == true) drawing = null
+        if (loading?.let { it.slot != heldSlot || held != CROSSBOW } == true) loading = null
+        return was && eating == null && drawing == null && loading == null
     }
 
     /**
@@ -2106,6 +2122,7 @@ class Session(
             log.debug("Refused {} dropping {} of {} from slot {}", player?.displayName, count, there?.stack?.item?.name, from.slot)
         }
         send(slotOf(from.slot))
+        if (stopUsingWhatsGone()) send(SetActorData(entityId, listOf(flagsItem(playerFlags()))))
     }
 
     /**
@@ -3102,9 +3119,9 @@ class Session(
         val yaw = Math.toRadians(yaw.toDouble())
         val pitch = Math.toRadians(pitch.toDouble())
         val velocity = Vec3(
-            (-sin(yaw) * cos(pitch) * THROW_SPEED).toFloat(),
-            (-sin(pitch) * THROW_SPEED).toFloat() + THROW_LIFT,
-            (cos(yaw) * cos(pitch) * THROW_SPEED).toFloat(),
+            (-sin(yaw) * cos(pitch) * DROP_SPEED).toFloat(),
+            (-sin(pitch) * DROP_SPEED).toFloat() + DROP_LIFT,
+            (cos(yaw) * cos(pitch) * DROP_SPEED).toFloat(),
         )
         world.spawnItem(stack, Vec3(position.x, position.y - 0.3f, position.z), velocity, THROWN_PICKUP_DELAY)
         log.debug("{} dropped {} {}", player?.displayName, stack.count, stack.item.name)
@@ -4255,6 +4272,7 @@ class Session(
         }
         if (dead) return
         tickHunger()
+        stopUsingWhatsGone()
         raiseShield()
         soundLoading()
         if (playerFlags() != flags || vitals.air != air) {
