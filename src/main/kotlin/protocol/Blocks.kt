@@ -307,13 +307,13 @@ internal fun decodeLevelSoundEvent(buffer: ByteBuf): LevelSoundEvent {
     return LevelSoundEvent(sound, position, data, entityType, baby, entityId)
 }
 
-internal fun decodeInventoryTransaction(buffer: ByteBuf): InventoryTransaction {
+internal fun decodeInventoryTransaction(buffer: ByteBuf, version: GameVersion): InventoryTransaction {
     val legacyRequestId = buffer.readLegacyRequest()
     val type = buffer.readVarUInt()
     val actions = buffer.readActions()
     return InventoryTransaction(
         type, actions, if (type == InventoryTransaction.USE_ITEM) buffer.readItemUse() else null, legacyRequestId,
-        useOnEntity = if (type == InventoryTransaction.USE_ITEM_ON_ENTITY) buffer.readItemUseOnEntity() else null,
+        useOnEntity = if (type == InventoryTransaction.USE_ITEM_ON_ENTITY) buffer.readItemUseOnEntity(version) else null,
     )
 }
 
@@ -359,11 +359,12 @@ private fun ByteBuf.readActions() = readList {
     InventoryAction(source, windowId, slot = readVarUInt(), before = readClientItem(), after = readClientItem())
 }
 
-private fun ByteBuf.readItemUseOnEntity(): ItemUseOnEntity {
+private fun ByteBuf.readItemUseOnEntity(version: GameVersion): ItemUseOnEntity {
     val target = readVarULong()
     val action = readVarInt()
     val hotbarSlot = readVarInt()
-    // Unlike a use on a block, it doesn't say which hand holds the item: 1.26.60 adds that.
+    // Unlike a use on a block, it doesn't say which hand holds the item before 1.26.60.
+    if (version >= GameVersion.V1_26_60) readUnsignedByte() // The hand holding the item
     val heldItem = readClientItem().runtimeId
     readVec3() // Where the player was
     readVec3() // Where they hit it

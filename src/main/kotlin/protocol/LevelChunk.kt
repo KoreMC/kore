@@ -38,10 +38,10 @@ private const val HEIGHTS_ALL_BELOW = 3
  * client then asks for the sub-chunks it wants of those with
  * [SubChunkRequest], each of which comes with what it needs to light it.
  */
-data class LevelChunk(val position: ChunkPos, val chunk: Chunk) : ServerPacket {
+data class LevelChunk(val position: ChunkPos, val chunk: Chunk) : VersionedPacket {
     override val id get() = LEVEL_CHUNK
 
-    override fun encodeBody(out: ByteBuf) {
+    override fun encodeBody(out: ByteBuf, version: GameVersion) {
         out.writeVarInt(position.x)
         out.writeVarInt(position.z)
         out.writeVarInt(OVERWORLD)
@@ -56,6 +56,7 @@ data class LevelChunk(val position: ChunkPos, val chunk: Chunk) : ServerPacket {
         payload.writeByte(0) // Border blocks, an Education Edition feature
         out.writeVarUInt(payload.readableBytes())
         out.writeBytes(payload)
+        if (version >= GameVersion.V1_26_60) out.writeBoolean(false) // Whether it only answers the client changing biomes, as the editor does
     }
 }
 

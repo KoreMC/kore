@@ -118,10 +118,10 @@ private fun colour(text: String?): Int {
     return if (digits.length == 6) (0xFF000000 or value).toInt() else value.toInt()
 }
 
-/** [skin] as the player list and skin changes carry it. */
-internal fun ByteBuf.writeSkin(skin: Skin): ByteBuf {
+/** [skin] as the player list carries it, to a client on [version]. */
+internal fun ByteBuf.writeSkin(skin: Skin, version: GameVersion): ByteBuf {
     writeString(skin.id)
-    writeString(skin.playFabId)
+    if (version < GameVersion.V1_26_60) writeString(skin.playFabId) // Which the player list carries instead from 1.26.60
     writeByteArray(skin.resourcePatch)
     writeSkinImage(skin.image)
     writeVarUInt(skin.animations.size)

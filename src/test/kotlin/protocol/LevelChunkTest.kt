@@ -28,6 +28,12 @@ class LevelChunkTest {
     }
 
     @Test
+    fun `from 1_26_60 a chunk says it isn't only biomes the client changed`() {
+        val chunk = LevelChunk(ChunkPos(1, -1), Chunk(listOf(PalettedStorage.filled(9)), List(SUB_CHUNK_COUNT) { plains }))
+        assertContentEquals(chunk.encode() + bytes(0x00), chunk.encode(GameVersion.V1_26_60))
+    }
+
+    @Test
     fun `a sub-chunk packs its height, then its blocks, the indices in words, then the palette`() {
         // Block 0 is the first palette entry (5) and every other block the second (9), so one bit each.
         val blocks = PalettedStorage.of(IntArray(SUB_CHUNK_VOLUME) { if (it == 0) 5 else 9 })

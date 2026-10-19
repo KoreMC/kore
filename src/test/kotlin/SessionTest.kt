@@ -30,6 +30,7 @@ import org.koremc.protocol.ContainerOpen
 import org.koremc.protocol.DeathInfo
 import org.koremc.protocol.FloatItem
 import org.koremc.protocol.GameMode
+import org.koremc.protocol.GameVersion
 import org.koremc.protocol.LevelEvent
 import org.koremc.protocol.InventorySlot
 import org.koremc.protocol.LevelSoundEvent
@@ -305,6 +306,13 @@ class SessionTest {
     }
 
     @Test
+    fun `a client on any version Kore speaks gets network settings`() {
+        clientSends(requestNetworkSettings(GameVersion.V1_26_60.protocol))
+
+        assertContentEquals(bytes(0x8F, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00), receivedPacket())
+    }
+
+    @Test
     fun `older clients are told they're out of date`() {
         clientSends(requestNetworkSettings(PROTOCOL - 1))
 
@@ -312,8 +320,15 @@ class SessionTest {
     }
 
     @Test
-    fun `newer clients are told the server is out of date, and nothing more`() {
+    fun `a client between versions Kore speaks is told it's out of date`() {
         clientSends(requestNetworkSettings(PROTOCOL + 1))
+
+        assertContentEquals(bytes(0x02, 0x00, 0x00, 0x00, 0x01), receivedPacket())
+    }
+
+    @Test
+    fun `newer clients are told the server is out of date, and nothing more`() {
+        clientSends(requestNetworkSettings(GameVersion.NEWEST.protocol + 1))
         clientSends(requestNetworkSettings(PROTOCOL))
 
         assertEquals(1, sent.size)

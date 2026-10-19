@@ -85,17 +85,17 @@ data class StartGame(
     val multiplayerCorrelationId: String = UUID.randomUUID().toString(),
     /** The blocks defined in data, which the client can't show or use without their definitions. */
     val blockDefinitions: BlockDefinitions = BlockDefinitions(emptyList()),
-) : ServerPacket {
+) : VersionedPacket {
     override val id get() = START_GAME
 
-    override fun encodeBody(out: ByteBuf) {
+    override fun encodeBody(out: ByteBuf, version: GameVersion) {
         out.writeVarLong(entityId)
         out.writeVarULong(runtimeId)
         out.writeVarInt(playerGameMode.id)
         out.writeVec3(position)
         out.writeFloatLE(pitch)
         out.writeFloatLE(yaw)
-        writeLevelSettings(out)
+        writeLevelSettings(out, version)
         out.writeString("") // Level ID
         out.writeString(worldName)
         out.writeString("") // Template content identity
@@ -125,7 +125,7 @@ data class StartGame(
         repeat(4) { out.writeString("") } // Telemetry: server, scenario, world and owner IDs
     }
 
-    private fun writeLevelSettings(out: ByteBuf) {
+    private fun writeLevelSettings(out: ByteBuf, version: GameVersion) {
         out.writeLongLE(seed)
         out.writeShortLE(0) // Spawn biome type: default
         out.writeString("") // User-defined spawn biome
@@ -139,6 +139,7 @@ data class StartGame(
         out.writeVarInt(0) // Editor world type: not an editor world
         out.writeBoolean(false) // Created in editor
         out.writeBoolean(false) // Exported from editor
+        if (version >= GameVersion.V1_26_60) out.writeByte(0) // How far the editor has moved the world on: not at all
         out.writeVarInt(0) // Day cycle stop time
         out.writeVarUInt(0) // Education edition offer
         out.writeBoolean(false) // Education features

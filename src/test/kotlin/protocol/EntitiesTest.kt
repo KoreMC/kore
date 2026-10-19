@@ -28,6 +28,14 @@ class EntitiesTest {
     }
 
     @Test
+    fun `from 1_26_60 an entity appearing says it rides no block`() {
+        val orb = AddExperienceOrb(7, Vec3(0.5f, 1f, 0.5f), Vec3(0f, 0.2f, 0f), value = 3)
+        assertContentEquals(orb.encode() + byteArrayOf(0), orb.encode(GameVersion.V1_26_60))
+        val bolt = AddLightning(8, Vec3(0.5f, 1f, 0.5f))
+        assertContentEquals(bolt.encode() + byteArrayOf(0), bolt.encode(GameVersion.V1_26_60))
+    }
+
+    @Test
     fun `entities go, and items fly to whoever picks them up`() {
         assertContentEquals(hex("0e0a"), RemoveActor(5).encode())
         assertContentEquals(hex("110501"), TakeItemActor(5, takerId = 1).encode())

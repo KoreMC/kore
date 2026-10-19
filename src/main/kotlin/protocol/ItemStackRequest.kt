@@ -168,24 +168,24 @@ data class ItemStackResponse(val responses: List<StackResponse>) : ServerPacket 
 }
 
 /** Reads the requests in [buffer]. */
-internal fun decodeItemStackRequest(buffer: ByteBuf): ItemStackRequest {
+internal fun decodeItemStackRequest(buffer: ByteBuf, version: GameVersion): ItemStackRequest {
     val count = buffer.readVarUInt()
     if (count > 100) throw PacketException("$count item stack requests in one packet")
-    return ItemStackRequest(List(count) { buffer.readStackRequest() })
+    return ItemStackRequest(List(count) { buffer.readStackRequest(version) })
 }
 
-/** Reads one request. */
-internal fun ByteBuf.readStackRequest(): StackRequest {
+/** Reads one request, as a client on [version] lays it out. */
+internal fun ByteBuf.readStackRequest(version: GameVersion): StackRequest {
     val id = readVarInt()
     val count = readVarUInt()
     if (count > 100) throw PacketException("$count actions in one item stack request")
-    val actions = List(count) { readStackAction() }
+    val actions = List(count) { readStackAction(version) }
     val filterStrings = readList { readString() }
     readIntLE() // Why they need filtering
     return StackRequest(id, actions, filterStrings)
 }
 
-// Action types, as Mojang numbers them now.
+// Action types, as Mojang numbers them now, in 1.26.60.
 private const val TAKE = 0
 private const val PLACE = 1
 private const val SWAP = 2
@@ -202,11 +202,13 @@ private const val CRAFT_CREATIVE = 12
 private const val CRAFT_RECIPE_OPTIONAL = 13
 private const val CRAFT_REPAIR_AND_DISENCHANT = 14
 private const val CRAFT_LOOM = 15
-private const val CRAFT_NON_IMPLEMENTED = 16
-private const val CRAFT_RESULTS = 17
+private const val CRAFT_RESERVED = 16
+private const val CRAFT_NON_IMPLEMENTED = 17
+private const val CRAFT_RESULTS = 18
 
-private fun ByteBuf.readStackAction(): StackAction {
-    val type = readVarUInt()
+private fun ByteBuf.readStackAction(version: GameVersion): StackAction {
+    // 1.26.50 has no reserved action, so the two after it are one lower.
+    val type = readVarUInt().let { if (version < GameVersion.V1_26_60 && it >= CRAFT_RESERVED) it + 1 else it }
     readUnsignedByte() // The type again, as it was numbered before 1.26.40
     return when (type) {
         TAKE, PLACE -> StackAction.Transfer(readUnsignedByte().toInt(), readSlotRef(), readSlotRef())
@@ -224,6 +226,7 @@ private fun ByteBuf.readStackAction(): StackAction {
         CRAFT_RECIPE_OPTIONAL -> StackAction.CraftOptional(readVarUInt(), readIntLE())
         CRAFT_REPAIR_AND_DISENCHANT -> StackAction.CraftGrindstone(readIntLE(), readUnsignedByte().toInt()).also { readVarInt() } // What the client reckons it earns
         CRAFT_LOOM -> StackAction.CraftLoom(readString(), readUnsignedByte().toInt())
+        CRAFT_RESERVED -> StackAction.Unsupported(type).also { readString(); readUnsignedByte() } // What it's for, and how many times
         CRAFT_RESULTS -> StackAction.Informational(type).also { readList { skipRequestItem() }; readUnsignedByte() }
         else -> throw PacketException("Unknown item stack request action $type")
     }

@@ -46,6 +46,11 @@ class StartGameTest {
         )
 
         assertEquals(HexFormat.of().formatHex(verified), HexFormat.of().formatHex(packet.encode()))
+
+        // From 1.26.60, how far the editor has moved the world on follows whether it was exported from the editor.
+        val exported = 47
+        val newer = verified.copyOfRange(0, exported) + byteArrayOf(0) + verified.copyOfRange(exported, verified.size)
+        assertEquals(HexFormat.of().formatHex(newer), HexFormat.of().formatHex(packet.encode(GameVersion.V1_26_60)))
     }
 
     @Test

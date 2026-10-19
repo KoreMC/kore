@@ -54,10 +54,10 @@ data class AddItemActor(val entityId: Long, val stack: ItemStack, val position: 
  * An experience orb appearing to the client: the entity [entityId], worth
  * [value], at [position] and moving at [velocity] blocks a tick.
  */
-data class AddExperienceOrb(val entityId: Long, val position: Vec3, val velocity: Vec3, val value: Int) : ServerPacket {
+data class AddExperienceOrb(val entityId: Long, val position: Vec3, val velocity: Vec3, val value: Int) : VersionedPacket {
     override val id get() = ADD_ACTOR
 
-    override fun encodeBody(out: ByteBuf) {
+    override fun encodeBody(out: ByteBuf, version: GameVersion) {
         out.writeVarLong(entityId)
         out.writeVarULong(entityId)
         out.writeString("minecraft:xp_orb")
@@ -70,7 +70,7 @@ data class AddExperienceOrb(val entityId: Long, val position: Vec3, val velocity
         out.writeActorData(listOf(flagsItem(setOf(ActorFlag.HAS_GRAVITY)), IntItem(ActorDataId.VALUE, value), FloatItem(ActorDataId.WIDTH, ITEM_SIZE), FloatItem(ActorDataId.HEIGHT, ITEM_SIZE)))
         out.writeVarUInt(0) // Int properties
         out.writeVarUInt(0) // Float properties
-        out.writeVarUInt(0) // Entities it rides or is ridden by
+        out.writeRidesNothing(version)
     }
 }
 
@@ -79,10 +79,10 @@ data class AddExperienceOrb(val entityId: Long, val position: Vec3, val velocity
  * as the block [block], by its network ID, [size] each way, at [position]
  * and moving at [velocity] blocks a tick.
  */
-data class AddFallingBlock(val entityId: Long, val block: Int, val position: Vec3, val velocity: Vec3, val size: Float) : ServerPacket {
+data class AddFallingBlock(val entityId: Long, val block: Int, val position: Vec3, val velocity: Vec3, val size: Float) : VersionedPacket {
     override val id get() = ADD_ACTOR
 
-    override fun encodeBody(out: ByteBuf) {
+    override fun encodeBody(out: ByteBuf, version: GameVersion) {
         out.writeVarLong(entityId)
         out.writeVarULong(entityId)
         out.writeString("minecraft:falling_block")
@@ -103,15 +103,15 @@ data class AddFallingBlock(val entityId: Long, val block: Int, val position: Vec
         )
         out.writeVarUInt(0) // Int properties
         out.writeVarUInt(0) // Float properties
-        out.writeVarUInt(0) // Entities it rides or is ridden by
+        out.writeRidesNothing(version)
     }
 }
 
 /** A lightning bolt striking, as the entity [entityId], which the client draws and flashes from [position] up. */
-data class AddLightning(val entityId: Long, val position: Vec3) : ServerPacket {
+data class AddLightning(val entityId: Long, val position: Vec3) : VersionedPacket {
     override val id get() = ADD_ACTOR
 
-    override fun encodeBody(out: ByteBuf) {
+    override fun encodeBody(out: ByteBuf, version: GameVersion) {
         out.writeVarLong(entityId)
         out.writeVarULong(entityId)
         out.writeString(LIGHTNING_BOLT)
@@ -124,8 +124,14 @@ data class AddLightning(val entityId: Long, val position: Vec3) : ServerPacket {
         out.writeActorData(listOf(flagsItem(emptySet())))
         out.writeVarUInt(0) // Int properties
         out.writeVarUInt(0) // Float properties
-        out.writeVarUInt(0) // Entities it rides or is ridden by
+        out.writeRidesNothing(version)
     }
+}
+
+/** That an entity appearing rides nothing: no entity, nor, from 1.26.60, a block, as someone sitting on one would. */
+internal fun ByteBuf.writeRidesNothing(version: GameVersion) {
+    writeVarUInt(0) // Entities it rides or is ridden by
+    if (version >= GameVersion.V1_26_60) writeBoolean(false) // A block it rides
 }
 
 /** The game's name for lightning bolts, which the sound of their thunder names too. */

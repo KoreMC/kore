@@ -12,8 +12,8 @@ import org.koremc.world.Vec3
 import java.util.EnumSet
 import java.util.UUID
 
-// Packet IDs and layouts follow Mojang's protocol schemas for 1.26.50 (protocol 2193):
-// https://github.com/Mojang/bedrock-protocol-docs
+// Packet IDs and layouts follow Mojang's protocol schemas for 1.26.50 (protocol 2193), and those
+// 1.26.60 changes, for it, as each GameVersion has them: https://github.com/Mojang/bedrock-protocol-docs
 private const val LOGIN = 1
 private const val PLAY_STATUS = 2
 private const val DISCONNECT = 5
@@ -192,6 +192,16 @@ class UnhandledPacket(val id: Int, val payload: ByteArray) : ClientPacket {
 sealed interface ServerPacket {
     val id: Int
     fun encodeBody(out: ByteBuf)
+
+    /** The body as [version] lays it out, which for most packets every version Kore speaks does the same. */
+    fun encodeBody(out: ByteBuf, version: GameVersion) = encodeBody(out)
+}
+
+/** A packet one of the versions Kore speaks lays out differently, which says how for each, and is as the oldest has it otherwise. */
+sealed interface VersionedPacket : ServerPacket {
+    override fun encodeBody(out: ByteBuf) = encodeBody(out, GameVersion.OLDEST)
+
+    override fun encodeBody(out: ByteBuf, version: GameVersion)
 }
 
 /** Tells the client how to compress from now on. Everything after this packet, both ways, uses it. */
@@ -444,7 +454,7 @@ data class ChunkRadiusUpdated(val radius: Int) : ServerPacket {
     }
 }
 
-private fun decodePlayerAuthInput(buffer: ByteBuf): PlayerAuthInput {
+private fun decodePlayerAuthInput(buffer: ByteBuf, version: GameVersion): PlayerAuthInput {
     val pitch = buffer.readFloatLE()
     val yaw = buffer.readFloatLE()
     val position = buffer.readVec3()
@@ -459,12 +469,13 @@ private fun decodePlayerAuthInput(buffer: ByteBuf): PlayerAuthInput {
     val delta = buffer.readVec3()
     // Each action is there if a flag before it says so.
     val itemUse = if (buffer.readBoolean()) buffer.readPackedItemUse() else null
-    val stackRequest = if (buffer.readBoolean()) buffer.readStackRequest() else null
+    val stackRequest = if (buffer.readBoolean()) buffer.readStackRequest(version) else null
     val blockActions = if (buffer.readBoolean()) buffer.readList { readBlockAction() } else emptyList()
     return PlayerAuthInput(pitch, yaw, headYaw, position, delta, tick, inputs, itemUse, stackRequest, blockActions)
 }
 
-fun decodeClientPacket(packet: ByteArray): ClientPacket {
+/** Reads [packet] as a client on [version] lays it out. */
+fun decodeClientPacket(packet: ByteArray, version: GameVersion = GameVersion.OLDEST): ClientPacket {
     val buffer = Unpooled.wrappedBuffer(packet)
     val id = try {
         buffer.readVarUInt() and PACKET_ID_MASK
@@ -482,16 +493,16 @@ fun decodeClientPacket(packet: ByteArray): ClientPacket {
             LOADING_SCREEN -> LoadingScreen(type = buffer.readVarInt()).also { if (buffer.readBoolean()) buffer.readUnsignedIntLE() } // An ID, for a screen the server opened
             INTERACT -> Interact(action = buffer.readUnsignedByte().toInt(), targetRuntimeId = buffer.readVarULong())
             CONTAINER_CLOSE -> ContainerClose(buffer.readUnsignedByte().toInt(), buffer.readUnsignedByte().toInt(), buffer.readBoolean())
-            ITEM_STACK_REQUEST -> decodeItemStackRequest(buffer)
-            INVENTORY_TRANSACTION -> decodeInventoryTransaction(buffer)
+            ITEM_STACK_REQUEST -> decodeItemStackRequest(buffer, version)
+            INVENTORY_TRANSACTION -> decodeInventoryTransaction(buffer, version)
             LEVEL_SOUND_EVENT -> decodeLevelSoundEvent(buffer)
             MOB_EQUIPMENT -> decodeMobEquipment(buffer)
             ACTOR_EVENT -> ActorEvent(entityId = buffer.readVarULong(), event = buffer.readUnsignedByte().toInt(), data = buffer.readVarInt())
-            ANIMATE -> decodeAnimate(buffer)
+            ANIMATE -> decodeAnimate(buffer, version)
             TEXT -> decodeText(buffer)
             COMMAND_REQUEST -> decodeCommandRequest(buffer)
             PLAYER_ACTION -> decodePlayerAction(buffer)
-            PLAYER_AUTH_INPUT -> decodePlayerAuthInput(buffer)
+            PLAYER_AUTH_INPUT -> decodePlayerAuthInput(buffer, version)
             LECTERN_UPDATE -> decodeLecternUpdate(buffer)
             BLOCK_ACTOR_DATA -> decodeEditedBlockData(buffer)
             ITEM_FRAME_DROP_ITEM -> decodeItemFrameDropItem(buffer)
@@ -524,9 +535,10 @@ private fun decodeResourcePackClientResponse(buffer: ByteBuf): ResourcePackClien
 /** Encodes a body now, for packets that keep their bytes to send again and again. */
 internal fun encodeOnce(write: ByteBuf.() -> Unit): ByteArray = ByteBufUtil.getBytes(Unpooled.buffer().apply(write))
 
-fun ServerPacket.encode(): ByteArray {
+/** The packet as a client on [version] reads it: its ID, then its body. */
+fun ServerPacket.encode(version: GameVersion = GameVersion.OLDEST): ByteArray {
     val buffer = Unpooled.buffer()
     buffer.writeVarUInt(id)
-    encodeBody(buffer)
+    encodeBody(buffer, version)
     return ByteBufUtil.getBytes(buffer)
 }

@@ -105,10 +105,10 @@ sealed interface PlayerListEntry {
  * shows, and where the client looks up the skin of each player it's shown.
  * A player must be on it before they appear.
  */
-data class PlayerList(val entries: List<PlayerListEntry>) : ServerPacket {
+data class PlayerList(val entries: List<PlayerListEntry>) : VersionedPacket {
     override val id get() = PLAYER_LIST
 
-    override fun encodeBody(out: ByteBuf) {
+    override fun encodeBody(out: ByteBuf, version: GameVersion) {
         out.writeVarUInt(entries.size)
         for (entry in entries) {
             // Each entry says which it is twice: as a variant, where Remove is 0 and Add 1, then as an action, where Add is 0 and Remove 1.
@@ -119,9 +119,10 @@ data class PlayerList(val entries: List<PlayerListEntry>) : ServerPacket {
                     out.writeVarLong(entry.entityId)
                     out.writeString(entry.name)
                     out.writeString(entry.xuid)
+                    if (version >= GameVersion.V1_26_60) out.writeString(entry.skin.playFabId) // Which their skin carries before 1.26.60
                     out.writeString("") // Platform chat ID
                     out.writeIntLE(entry.platform)
-                    out.writeSkin(entry.skin)
+                    out.writeSkin(entry.skin, version)
                     out.writeBoolean(false) // Teacher, in Education Edition
                     out.writeBoolean(false) // Host
                     out.writeBoolean(false) // A split screen player sharing another's connection
@@ -152,10 +153,10 @@ data class AddPlayer(
     val abilities: Set<Ability>,
     val platform: Int,
     val permissions: PermissionLevel = PermissionLevel.MEMBER,
-) : ServerPacket {
+) : VersionedPacket {
     override val id get() = ADD_PLAYER
 
-    override fun encodeBody(out: ByteBuf) {
+    override fun encodeBody(out: ByteBuf, version: GameVersion) {
         out.writeUuid(uuid)
         out.writeString(name)
         out.writeVarULong(entityId)
@@ -171,7 +172,7 @@ data class AddPlayer(
         out.writeVarUInt(0) // Int properties, which only entities from behaviour packs have
         out.writeVarUInt(0) // Float properties, likewise
         out.writeAbilities(entityId, permissions, abilities)
-        out.writeVarUInt(0) // Entities it rides or is ridden by
+        out.writeRidesNothing(version)
         out.writeString("") // Device ID
         out.writeIntLE(platform)
     }
@@ -223,18 +224,28 @@ data class MovePlayer(
  * An entity doing something brief that the client animates, like a player
  * swinging their arm, with [data] about it, like how many sparks a hit
  * throws off. The client sends it when its own player swings, with
- * [swingSource] saying why, like `mine` or `build`, and the server passes
- * it on for everyone else to see.
+ * [swingSource] saying why, like `mine` or `build`, and since 1.26.60 the
+ * [hand] that swings, if not the main one, and the server passes it on for
+ * everyone else to see.
  */
-data class Animate(val action: Int, val entityId: Long, val data: Float = 0f, val swingSource: String? = null) : ClientPacket, ServerPacket {
+data class Animate(
+    val action: Int,
+    val entityId: Long,
+    val data: Float = 0f,
+    val swingSource: String? = null,
+    val hand: Int? = null,
+) : ClientPacket, VersionedPacket {
     override val id get() = ANIMATE
 
-    override fun encodeBody(out: ByteBuf) {
+    override fun encodeBody(out: ByteBuf, version: GameVersion) {
         out.writeByte(action)
         out.writeVarULong(entityId)
         out.writeFloatLE(data)
         out.writeBoolean(swingSource != null)
         swingSource?.let(out::writeString)
+        if (version < GameVersion.V1_26_60) return
+        out.writeBoolean(hand != null)
+        hand?.let(out::writeByte)
     }
 
     companion object {
@@ -286,10 +297,11 @@ data class ShowArmour(val entityId: Long, val armour: List<ItemStack?>) : Server
     }
 }
 
-internal fun decodeAnimate(buffer: ByteBuf): Animate {
+internal fun decodeAnimate(buffer: ByteBuf, version: GameVersion): Animate {
     val action = buffer.readUnsignedByte().toInt()
     val entityId = buffer.readVarULong()
     val data = buffer.readFloatLE()
     val swingSource = if (buffer.readBoolean()) buffer.readString() else null
-    return Animate(action, entityId, data, swingSource)
+    val hand = if (version >= GameVersion.V1_26_60 && buffer.readBoolean()) buffer.readUnsignedByte().toInt() else null
+    return Animate(action, entityId, data, swingSource, hand)
 }

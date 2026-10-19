@@ -68,6 +68,7 @@ import org.koremc.protocol.EnchantOption
 import org.koremc.protocol.FloatItem
 import org.koremc.protocol.GameMode
 import org.koremc.protocol.GameRulesChanged
+import org.koremc.protocol.GameVersion
 import org.koremc.protocol.InputFlag
 import org.koremc.protocol.Interact
 import org.koremc.protocol.InventoryAction
@@ -735,9 +736,10 @@ private val PLAYER_FLAGS = setOf(ActorFlag.BREATHING, ActorFlag.HAS_GRAVITY, Act
  * when compression switches on, and walks the login sequence one packet
  * at a time:
  *
- * 1. `RequestNetworkSettings` names the client's protocol. A mismatch gets a
- *    failed `PlayStatus`; a match gets `NetworkSettings`, after which every
- *    batch is compressed.
+ * 1. `RequestNetworkSettings` names the client's protocol. One Kore doesn't
+ *    speak gets a failed `PlayStatus`; one it does gets `NetworkSettings`,
+ *    after which every batch is compressed, and every packet is as the
+ *    client's version lays it out.
  * 2. `Login` carries the client's identity and client data, which must
  *    authenticate. A login that doesn't gets a `Disconnect`. One that does
  *    gets `PlayStatus(LOGIN_SUCCESS)` straight away: NetherNet has no
@@ -822,6 +824,9 @@ class Session(
     private enum class State { AWAITING_NETWORK_SETTINGS_REQUEST, AWAITING_LOGIN, NEGOTIATING_RESOURCE_PACKS, LOADING_WORLD, SPAWNING, IN_GAME, CLOSED }
 
     private val batches = BatchCodec()
+
+    /** The version of the game the client is on, which its packets are laid out as, both ways. */
+    private var gameVersion = GameVersion.OLDEST
     private val world = game.world
     private val inventory = PlayerInventory(world::newStackId)
 
@@ -1079,7 +1084,7 @@ class Session(
 
     fun receive(message: ByteArray) {
         val packets = try {
-            batches.decode(message).map(::decodeClientPacket)
+            batches.decode(message).map { decodeClientPacket(it, gameVersion) }
         } catch (e: PacketException) {
             log.warn("Dropped a batch from network {}: {}", networkId, e.message)
             return
@@ -1127,7 +1132,7 @@ class Session(
                 is PlayerAction -> if (packet.action == PlayerAction.CREATIVE_DESTROY_BLOCK) onBreak(packet.position, creativeOnly = true)
                 is MobEquipment -> onEquip(packet)
                 is ActorEvent -> if (packet.event == ActorEvent.EATING_ITEM) onEating()
-                is Animate -> if (packet.action == Animate.SWING_ARM) viewers().forEach { it.showSwing(entityId, packet.swingSource) }
+                is Animate -> if (packet.action == Animate.SWING_ARM) viewers().forEach { it.showSwing(entityId, packet.swingSource, packet.hand) }
                 is LevelSoundEvent -> onSound(packet)
                 is LecternUpdate -> onLecternUpdate(packet)
                 is EditedBlockData -> onEditedBlockData(packet)
@@ -3143,9 +3148,9 @@ class Session(
         else -> PLAYER_HEIGHT
     }
 
-    /** Shows the client the player [entityId] swinging their arm, for [source], if it can see them. */
-    private fun showSwing(entityId: Long, source: String?) {
-        if (entityId in shownPlayers) send(Animate(Animate.SWING_ARM, entityId, swingSource = source))
+    /** Shows the client the player [entityId] swinging their arm, for [source], with [hand], or the main one, if it can see them. */
+    private fun showSwing(entityId: Long, source: String?, hand: Int? = null) {
+        if (entityId in shownPlayers) send(Animate(Animate.SWING_ARM, entityId, swingSource = source, hand = hand))
     }
 
     /** The slot of the player's items numbered [slot], as it is now, for the client. */
@@ -4145,12 +4150,19 @@ class Session(
         state = State.CLOSED
     }
 
-    /** Turns away clients on another protocol, telling them whose version is behind. */
+    /**
+     * Takes the client to be on the version of the game that speaks
+     * [clientProtocol], if Kore speaks it, and turns away clients on any
+     * other, telling them whose version is behind.
+     */
     private fun acceptsProtocol(clientProtocol: Int): Boolean {
-        if (clientProtocol == config.protocol) return true
+        GameVersion.of(clientProtocol)?.let {
+            gameVersion = it
+            return true
+        }
 
-        log.info("Network {} speaks protocol {}, but Kore speaks {}", networkId, clientProtocol, config.protocol)
-        val status = if (clientProtocol < config.protocol) PlayStatus.Status.LOGIN_FAILED_CLIENT_OLD else PlayStatus.Status.LOGIN_FAILED_SERVER_OLD
+        log.info("Network {} speaks protocol {}, but Kore speaks {}", networkId, clientProtocol, GameVersion.entries.joinToString { "${it.protocol} (${it.title})" })
+        val status = if (clientProtocol < GameVersion.NEWEST.protocol) PlayStatus.Status.LOGIN_FAILED_CLIENT_OLD else PlayStatus.Status.LOGIN_FAILED_SERVER_OLD
         send(PlayStatus(status))
         state = State.CLOSED
         return false
@@ -4162,7 +4174,7 @@ class Session(
 
     /** Sends [packets] together in one batch. */
     private fun send(vararg packets: ServerPacket) {
-        val batch = batches.encode(packets.map { it.encode() })
+        val batch = batches.encode(packets.map { it.encode(gameVersion) })
         packetLog.debug("-> {}: {} ({} bytes)", who, names(packets), batch.size)
         send(batch)
     }

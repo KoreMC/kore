@@ -76,7 +76,7 @@ class CraftingTest {
             listOf(
                 StackAction.Craft(recipe, times),
                 StackAction.Consume(1, SlotRef(ContainerName.CRAFTING_INPUT, 28, 0)), // Kore works out what the grid uses itself
-                StackAction.Informational(17),
+                StackAction.Informational(18),
                 StackAction.Transfer(count, createdOutput(requestId), SlotRef(ContainerName.HOTBAR, to, 0)),
             ),
         ),

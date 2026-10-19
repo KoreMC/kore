@@ -70,7 +70,8 @@ data class ServerConfig(
     val commandLimits: CommandLimits = CommandLimits(),
     /** What the logs keep: what players say and the commands they run, and detail in the console, as kore.jsonc says. */
     val logs: LogSettings = LogSettings(),
-    // Must match the client's protocol number and version string.
+    // The version the game data is for, which worlds are saved as and the server list shows. Clients on any
+    // of the versions Kore speaks can join, whichever this is: see GameVersion.
     val protocol: Int = 2193,
     val version: String = "1.26.50",
 )

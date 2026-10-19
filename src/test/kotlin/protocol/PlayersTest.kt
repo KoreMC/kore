@@ -61,6 +61,10 @@ class PlayersTest {
             "0001000001" + "0474727565" + "0468617368" + // Flags, trusted, profile hash
             "000000" + "00000000" // Not a teacher, host or split screen player, and no colour
         assertContentEquals(hex(expected), packet.encode())
+
+        // From 1.26.60, the PlayFab ID comes after the XUID instead of in the skin.
+        val newer = expected.replace("0432353335" + "00" + "07000000" + "06736b696e2d31" + "027066", "0432353335" + "027066" + "00" + "07000000" + "06736b696e2d31")
+        assertContentEquals(hex(newer), packet.encode(GameVersion.V1_26_60))
     }
 
     @Test
@@ -77,6 +81,9 @@ class PlayersTest {
             "0500000000000000" + "01" + "00" + "01" + "0100" + "ffff0f00" + "3f000000" + "cdcc4c3d" + "0000803f" + "cdcccc3d" +
             "00" + "00" + "07000000" // No links or device ID, then the platform
         assertContentEquals(hex(expected), packet.encode())
+
+        // From 1.26.60, a block they might ride comes after the links.
+        assertContentEquals(hex(expected.removeSuffix("00" + "00" + "07000000") + "00" + "00" + "00" + "07000000"), packet.encode(GameVersion.V1_26_60))
     }
 
     @Test
@@ -93,6 +100,16 @@ class PlayersTest {
     fun `a client swinging its arm says why, or not`() {
         assertEquals(Animate(Animate.SWING_ARM, 5, swingSource = "mine"), decodeClientPacket(hex("2c" + "01" + "05" + "00000000" + "01" + "046d696e65")))
         assertEquals(Animate(Animate.SWING_ARM, 5), decodeClientPacket(hex("2c" + "01" + "05" + "00000000" + "00")))
+    }
+
+    @Test
+    fun `from 1_26_60 a swing says which hand, if it's not the main one`() {
+        val offhand = Animate(Animate.SWING_ARM, 5, swingSource = "mine", hand = 1)
+        assertContentEquals(hex("2c" + "01" + "05" + "00000000" + "01" + "046d696e65" + "01" + "01"), offhand.encode(GameVersion.V1_26_60))
+        assertEquals(offhand, decodeClientPacket(hex("2c" + "01" + "05" + "00000000" + "01" + "046d696e65" + "01" + "01"), GameVersion.V1_26_60))
+        assertContentEquals(hex("2c" + "04" + "05" + "00005c42" + "00" + "00"), Animate(Animate.CRITICAL_HIT, 5, 55f).encode(GameVersion.V1_26_60))
+        // 1.26.50 has no hand to say.
+        assertContentEquals(hex("2c" + "01" + "05" + "00000000" + "01" + "046d696e65"), offhand.encode())
     }
 
     @Test

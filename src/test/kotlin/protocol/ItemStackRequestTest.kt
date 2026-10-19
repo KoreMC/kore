@@ -50,10 +50,21 @@ class ItemStackRequestTest {
                 StackAction.Consume(1, SlotRef(13, 28, 5)),
                 StackAction.BeaconPayment(primary = 1, secondary = 10),
                 StackAction.Craft(recipe = 9, times = 1),
-                StackAction.Informational(17),
+                StackAction.Informational(18),
             ),
             actions,
         )
+    }
+
+    @Test
+    fun `from 1_26_60 a reserved action comes before the last two, which are numbered one higher`() {
+        val packet = request(id = -5) {
+            action(16, legacy = 18) { writeString("future").writeByte(1) } // Reserved
+            action(18, legacy = 20) { writeVarUInt(0).writeByte(1) } // The deprecated results: nothing
+        }
+
+        val actions = (decodeClientPacket(packet, GameVersion.V1_26_60) as ItemStackRequest).requests.single().actions
+        assertEquals(listOf(StackAction.Unsupported(16), StackAction.Informational(18)), actions)
     }
 
     @Test
