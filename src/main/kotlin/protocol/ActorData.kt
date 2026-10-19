@@ -6,7 +6,7 @@ private const val SET_ACTOR_DATA = 39
 
 /** Mojang's IDs for the actor data Kore sends. */
 enum class ActorDataId(val id: Int) {
-    /** A bitmask of [ActorFlag]s. */
+    /** A bitmask of [ActorFlag]s, the first 64 of them. */
     FLAGS(0),
     /** Which kind of an actor it is, like the block a falling block is, by its network ID. */
     VARIANT(2),
@@ -21,6 +21,8 @@ enum class ActorDataId(val id: Int) {
     HEIGHT(54),
     /** Whether the name shows even when the actor is hidden from view, as a byte. */
     ALWAYS_SHOW_NAME(81),
+    /** The rest of the [ActorFlag]s, from bit 64 up. */
+    FLAGS_2(92),
     /** The effects whose particles show around an actor, packed into a long. */
     VISIBLE_MOB_EFFECTS(131),
 }
@@ -44,6 +46,8 @@ enum class ActorFlag(val bit: Int) {
     /** Without this, the player floats rather than falls. */
     HAS_GRAVITY(49),
     SWIMMING(57),
+    /** Holding up a shield. */
+    BLOCKING(72),
 }
 
 /** One item of an actor's synced data: an ID, and a value of one of the types Mojang allows. */
@@ -63,8 +67,15 @@ data class LongItem(override val id: ActorDataId, val value: Long) : DataItem
 
 data class StringItem(override val id: ActorDataId, val value: String) : DataItem
 
-/** The flags item for [flags]. */
-fun flagsItem(flags: Set<ActorFlag>) = LongItem(ActorDataId.FLAGS, flags.fold(0L) { bits, flag -> bits or (1L shl flag.bit) })
+/** The flags item for [flags], of those below bit 64, which it holds. */
+fun flagsItem(flags: Set<ActorFlag>) = LongItem(ActorDataId.FLAGS, bitsOf(flags, from = 0))
+
+/** The second flags item for [flags], of those from bit 64 up, which it holds. */
+fun secondFlagsItem(flags: Set<ActorFlag>) = LongItem(ActorDataId.FLAGS_2, bitsOf(flags, from = Long.SIZE_BITS))
+
+/** [flags] as bits of a long, of those from bit [from] for as many as a long holds. */
+private fun bitsOf(flags: Set<ActorFlag>, from: Int) =
+    flags.filter { it.bit - from in 0 until Long.SIZE_BITS }.fold(0L) { bits, flag -> bits or (1L shl (flag.bit - from)) }
 
 /**
  * Changes an actor's synced data. [tick] ties the change to one of the

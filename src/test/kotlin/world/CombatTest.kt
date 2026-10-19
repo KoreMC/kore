@@ -68,6 +68,31 @@ class CombatTest {
     }
 
     @Test
+    fun `a shield wears by a hit it blocks, rounded up, from 3 up`() {
+        assertEquals(0, shieldWear(2.9f))
+        assertEquals(3, shieldWear(3f))
+        assertEquals(8, shieldWear(7.5f))
+    }
+
+    @Test
+    fun `an axe's hit disables a shield, and nothing else's does`() {
+        assertTrue(disablesShields("minecraft:iron_axe"))
+        assertFalse(disablesShields("minecraft:iron_pickaxe"))
+        assertFalse(disablesShields(null))
+    }
+
+    @Test
+    fun `a shield covers hits from in front, however high, but not from behind`() {
+        val blocker = Vec3(0f, 0f, 0f)
+        // Facing south, toward positive z.
+        assertTrue(shieldCovers(blocker, 0f, Vec3(0.5f, 5f, 2f)))
+        assertFalse(shieldCovers(blocker, 0f, Vec3(0f, 0f, -2f)))
+        // Facing west, toward negative x.
+        assertTrue(shieldCovers(blocker, 90f, Vec3(-2f, 0f, 0f)))
+        assertFalse(shieldCovers(blocker, 90f, Vec3(2f, 0f, 1f)))
+    }
+
+    @Test
     fun `each piece of netherite takes a tenth of a hit's knockback`() {
         assertNear(0.2f, knockbackResistance(listOf(item("netherite_helmet"), item("diamond_chestplate"), item("netherite_boots"), null)))
         assertEquals(0f, knockbackResistance(listOf(null, null, null, null)))

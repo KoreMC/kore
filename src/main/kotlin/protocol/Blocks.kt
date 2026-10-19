@@ -289,8 +289,11 @@ data class LevelSoundEvent(
         /** A button popping back out. The data is the button's network ID, for the click of what it's made of. */
         const val BUTTON_CLICK_OFF = "button.click_off"
 
-        /** An item wearing out and breaking. The data is -1, for no block. */
+        /** An item wearing out and breaking, or a shield disabled. The data is -1, for no block. */
         const val BREAK = "break"
+
+        /** A shield blocking a hit. */
+        const val SHIELD_BLOCK = "item.shield.block"
     }
 }
 

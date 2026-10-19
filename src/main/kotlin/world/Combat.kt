@@ -3,7 +3,10 @@ package org.koremc.world
 import org.koremc.registry.ItemStack
 import org.koremc.registry.SHARPNESS
 import org.koremc.registry.levelOf
+import kotlin.math.ceil
+import kotlin.math.cos
 import kotlin.math.floor
+import kotlin.math.sin
 
 /** How hard a bare hand hits, and anything that isn't a weapon or tool: half a heart. */
 private const val HAND_DAMAGE = 1f
@@ -56,6 +59,19 @@ const val FIRE_ASPECT_TICKS = 4 * 20
 const val CRITICAL_HIT_PARTICLES = 55
 const val ENCHANTED_HIT_PARTICLES = 15
 
+/** A shield, as the game names it, and the kind of item its wait between uses is for, which an axe starts. */
+const val SHIELD = "minecraft:shield"
+const val SHIELD_COOLDOWN = "shield"
+
+/** How long a shield takes to rise before it blocks, in ticks: a quarter of a second. */
+const val SHIELD_RAISE_TICKS = 5
+
+/** How long an axe's hit disables the shield that blocks it, in ticks: five seconds. */
+const val SHIELD_DISABLED_TICKS = 5 * 20
+
+/** The least a hit a shield blocks must do to wear it. */
+private const val SHIELD_WEAR_FROM = 3f
+
 /** How hard [held], or a bare hand, hits, before effects and enchantments. */
 fun attackDamage(held: ItemStack?): Float = held?.let { WEAPON_DAMAGE[it.item.name] } ?: HAND_DAMAGE
 
@@ -90,6 +106,22 @@ fun sharpnessDamage(held: ItemStack?): Float = floor((held?.levelOf(SHARPNESS) ?
 
 /** A hit of [damage] made critical. */
 fun critical(damage: Float) = damage * CRITICAL_MULTIPLIER
+
+/** How much a shield wears from blocking a hit of [damage]: by the damage, rounded up, from 3 up, and not at all for less. */
+fun shieldWear(damage: Float): Int = if (damage < SHIELD_WEAR_FROM) 0 else ceil(damage).toInt()
+
+/** Whether a hit with [item] disables the shield that blocks it, as an axe's does. */
+fun disablesShields(item: String?) = item?.endsWith("_axe") == true
+
+/**
+ * Whether a shield raised at [blocker], by someone facing the way [yaw]
+ * says, covers a hit from [from]: anything in front of them, going by
+ * where it is across, and not how high.
+ */
+fun shieldCovers(blocker: Vec3, yaw: Float, from: Vec3): Boolean {
+    val facing = Math.toRadians(yaw.toDouble())
+    return -sin(facing) * (from.x - blocker.x) + cos(facing) * (from.z - blocker.z) > 0
+}
 
 /** How much of a hit's knockback a player wearing [armour] shakes off, from 0 to 1. */
 fun knockbackResistance(armour: List<ItemStack?>): Float =

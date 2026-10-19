@@ -155,6 +155,7 @@ import org.koremc.protocol.abilitiesFor
 import org.koremc.protocol.decodeClientPacket
 import org.koremc.protocol.encode
 import org.koremc.protocol.flagsItem
+import org.koremc.protocol.secondFlagsItem
 import org.koremc.protocol.parseConnectionRequest
 import org.koremc.protocol.skinFrom
 import org.koremc.protocol.subChunkPayload
@@ -200,6 +201,13 @@ import org.koremc.world.CAKE_NUTRITION
 import org.koremc.world.CAKE_SATURATION
 import org.koremc.world.CRAFTER_SLOTS
 import org.koremc.world.CRITICAL_HIT_PARTICLES
+import org.koremc.world.SHIELD
+import org.koremc.world.SHIELD_COOLDOWN
+import org.koremc.world.SHIELD_DISABLED_TICKS
+import org.koremc.world.SHIELD_RAISE_TICKS
+import org.koremc.world.disablesShields
+import org.koremc.world.shieldCovers
+import org.koremc.world.shieldWear
 import org.koremc.world.Cartographed
 import org.koremc.world.Changes
 import org.koremc.world.ChunkPos
@@ -983,6 +991,9 @@ class Session(
     /** When the player can next use an item of each kind with a wait between uses, by the game's name for the kind, in [aliveTicks]. */
     private val cooldowns = HashMap<String, Int>()
 
+    /** When the player raised the shield they hold up, in [aliveTicks], while they hold it up. */
+    private var shieldRaisedAt: Int? = null
+
     /** The food and saturation the client last heard the player has. */
     private var shownHunger = MAX_FOOD to STARTING_SATURATION
 
@@ -1447,7 +1458,7 @@ class Session(
         listOfNotNull(
             ActorFlag.BREATHING.takeIf { breathing }, ActorFlag.SPRINTING.takeIf { sprinting }, ActorFlag.SNEAKING.takeIf { sneaking },
             ActorFlag.ON_FIRE.takeIf { vitals.fireTicks > 0 }, ActorFlag.SWIMMING.takeIf { swimming }, ActorFlag.GLIDING.takeIf { gliding },
-            ActorFlag.USING_ITEM.takeIf { eating != null },
+            ActorFlag.USING_ITEM.takeIf { eating != null }, ActorFlag.BLOCKING.takeIf { shieldRaisedAt != null },
         )
 
     /** Whether the player breathes, rather than holding their breath underwater. */
@@ -3045,16 +3056,17 @@ class Session(
         val armour: List<ItemStack?>,
         /** The effects whose particles show around them. */
         val effects: Long,
-        /** Whether Invisibility hides them, whether they burn, and whether they eat. */
+        /** Whether Invisibility hides them, whether they burn, whether they eat, and whether they hold up a shield. */
         val invisible: Boolean,
         val onFire: Boolean,
         val eating: Boolean,
+        val shieldUp: Boolean,
     )
 
     private fun look() = Look(
         position, pitch, yaw, headYaw, onGround, sneaking, sprinting, swimming, gliding, heldSlot, inventory.items[heldSlot]?.stack,
         inventory.offhand[0]?.stack, inventory.armour.contents().map { it?.stack }, effects.visible(), effects[Effect.INVISIBILITY] != null,
-        vitals.fireTicks > 0, eating != null,
+        vitals.fireTicks > 0, eating != null, shieldRaisedAt != null,
     )
 
     /**
@@ -3107,6 +3119,7 @@ class Session(
             if (now.offhand != before.offhand) packets += ShowEquipment(other.entityId, now.offhand, 0, OFFHAND_WINDOW)
             if (now.armour != before.armour) packets += ShowArmour(other.entityId, now.armour)
             if (now.effects != before.effects) packets += SetActorData(other.entityId, listOf(LongItem(ActorDataId.VISIBLE_MOB_EFFECTS, now.effects)))
+            if (now.shieldUp != before.shieldUp) packets += SetActorData(other.entityId, listOf(secondFlagsItem(shownFlags(now))))
         }
         if (packets.isNotEmpty()) send(*packets.toTypedArray())
     }
@@ -3126,6 +3139,7 @@ class Session(
         val identity = checkNotNull(player) { "a player in the game has logged in" }
         val data = listOf(
             flagsItem(shownFlags(look)),
+            secondFlagsItem(shownFlags(look)),
             StringItem(ActorDataId.NAME, identity.displayName),
             ByteItem(ActorDataId.ALWAYS_SHOW_NAME, 1),
             FloatItem(ActorDataId.SCALE, 1f),
@@ -3140,10 +3154,15 @@ class Session(
         )
     }
 
-    /** The flags others see a player with as they [look]: their own, that their name shows above them, whether they can't be seen, whether they burn, and whether they eat. */
+    /**
+     * The flags others see a player with as they [look]: their own, that
+     * their name shows above them, whether they can't be seen, whether they
+     * burn, whether they eat, and whether they hold up a shield.
+     */
     private fun shownFlags(look: Look) = PLAYER_FLAGS + ActorFlag.SHOW_NAME + ActorFlag.ALWAYS_SHOW_NAME +
         listOfNotNull(ActorFlag.SPRINTING.takeIf { look.sprinting }, ActorFlag.SNEAKING.takeIf { look.sneaking }, ActorFlag.INVISIBLE.takeIf { look.invisible }, ActorFlag.ON_FIRE.takeIf { look.onFire },
             ActorFlag.SWIMMING.takeIf { look.swimming }, ActorFlag.GLIDING.takeIf { look.gliding }, ActorFlag.USING_ITEM.takeIf { look.eating },
+            ActorFlag.BLOCKING.takeIf { look.shieldUp },
         )
 
     private fun heightOf(look: Look) = when {
@@ -3506,12 +3525,21 @@ class Session(
         val target = viewers().find { it.entityId == use.target && it !== this && it.isInGame && !it.dead } ?: return
         val reach = if (gameMode == GameMode.CREATIVE) CREATIVE_ATTACK_REACH else ATTACK_REACH
         if (use.target !in shownPlayers || eyes().distanceTo(target.feet) > reach) return
+        // Hitting lowers the player's own shield, which takes as long to block again as raising it did.
+        if (shieldRaisedAt != null) shieldRaisedAt = aliveTicks
         val held = heldStack
         val crit = canCrit(held)
         val sharpness = sharpnessDamage(held)
         // A harder hit in the grace after the last hurts by as much harder as it is, but knocks nobody back.
         val fresh = !target.vitals.inGrace
         val damage = withStrength(attackDamage(held), effects.level(Effect.STRENGTH), effects.level(Effect.WEAKNESS)) + sharpness
+        if (target.blocks(this, held, if (crit) critical(damage) else damage)) {
+            // Fire Aspect sets them burning all the same, and the shield knocks the player back.
+            held?.levelOf(FIRE_ASPECT)?.takeIf { it > 0 }?.let { target.setOnFire(it * FIRE_ASPECT_TICKS) }
+            knockBack(target.feet, extra = 0)
+            log.debug("{}'s shield blocked {}'s hit", target.name, name)
+            return
+        }
         val hurt = target.hurt(if (crit) critical(damage) else damage, DamageCause.ATTACK, by = this, weapon = held)
         val sound = if (hurt) ATTACK_STRONG else ATTACK_NO_DAMAGE
         showAround(target.feet.toBlockPos(), LevelSoundEvent(sound, target.eyes(), -1, entityType = PLAYER_ENTITY))
@@ -3524,6 +3552,52 @@ class Session(
         held?.levelOf(FIRE_ASPECT)?.takeIf { it > 0 }?.let { target.setOnFire(it * FIRE_ASPECT_TICKS) }
         if (!creative && held != null) wearHeld(wearFromHitting(held.item.name))
         exhaust(ATTACK_EXHAUSTION)
+    }
+
+    /**
+     * Raises the shield the player holds while they sneak, in their hand or
+     * else their offhand, and lowers it once they stop, or it leaves their
+     * hands, or an axe disables it, which they and everyone who sees them
+     * see.
+     */
+    private fun raiseShield() {
+        val raised = sneaking && gameMode != GameMode.SPECTATOR && heldShield() != null && (cooldowns[SHIELD_COOLDOWN] ?: 0) <= aliveTicks
+        if (raised == (shieldRaisedAt != null)) return
+        shieldRaisedAt = if (raised) aliveTicks else null
+        send(SetActorData(entityId, listOf(secondFlagsItem(playerFlags()))))
+    }
+
+    /** The shield the player would block with: one in their hand, or else their offhand, as its container, slot and window. */
+    private fun heldShield(): Triple<Container, Int, Int>? =
+        listOf(Triple(inventory.items, heldSlot, INVENTORY_WINDOW), Triple(inventory.offhand, 0, OFFHAND_WINDOW))
+            .firstOrNull { (container, slot) -> container[slot]?.stack?.item?.name == SHIELD }
+
+    /**
+     * Blocks a hit of [damage] from [attacker], with [weapon], with the
+     * player's shield, if it's been up long enough and the hit comes from in
+     * front of them: it does nothing to them, but wears the shield, and an
+     * axe disables it for a while. Everyone around hears it. Returns whether
+     * it blocked the hit.
+     */
+    private fun blocks(attacker: Session, weapon: ItemStack?, damage: Float): Boolean {
+        val raisedAt = shieldRaisedAt ?: return false
+        if (aliveTicks - raisedAt < SHIELD_RAISE_TICKS || !shieldCovers(feet, yaw, attacker.feet)) return false
+        val (container, slot, window) = heldShield() ?: return false
+        val shield = container[slot] ?: return false
+        val worn = shield.stack.worn(shieldWear(damage))
+        if (worn != shield.stack) {
+            container[slot] = worn?.let { shield.copy(stack = it) }
+            send(InventorySlot(slot, worn, if (worn == null) 0 else shield.id, window))
+        }
+        val disabled = disablesShields(weapon?.item?.name)
+        showAround(feet.toBlockPos(), LevelSoundEvent(LevelSoundEvent.SHIELD_BLOCK, position, -1))
+        if (worn == null || disabled) showAround(feet.toBlockPos(), LevelSoundEvent(LevelSoundEvent.BREAK, position, -1))
+        if (disabled) {
+            cooldowns[SHIELD_COOLDOWN] = aliveTicks + SHIELD_DISABLED_TICKS
+            send(PlayerStartItemCooldown(SHIELD_COOLDOWN, SHIELD_DISABLED_TICKS))
+            raiseShield()
+        }
+        return true
     }
 
     /**
@@ -3648,6 +3722,7 @@ class Session(
         }
         if (dead) return
         tickHunger()
+        raiseShield()
         if (playerFlags() != flags || vitals.air != air) {
             send(SetActorData(entityId, listOf(flagsItem(playerFlags()), ShortItem(ActorDataId.AIR_SUPPLY, maxOf(vitals.air, 0).toShort()))))
         }
@@ -3834,6 +3909,10 @@ class Session(
         dead = true
         eating = null
         cooldowns.clear()
+        if (shieldRaisedAt != null) {
+            shieldRaisedAt = null
+            send(SetActorData(entityId, listOf(secondFlagsItem(playerFlags()))))
+        }
         stopBreaking()
         closeWindow(reply = true, byServer = true)
         vitals.health = 0f

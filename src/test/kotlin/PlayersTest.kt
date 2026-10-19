@@ -29,7 +29,9 @@ import org.koremc.protocol.Text
 import org.koremc.protocol.clientDataToken
 import org.koremc.protocol.connectionRequest
 import org.koremc.protocol.encode
+import org.koremc.protocol.PlayerStartItemCooldown
 import org.koremc.protocol.flagsItem
+import org.koremc.protocol.secondFlagsItem
 import org.koremc.protocol.loginPacket
 import org.koremc.protocol.readString
 import org.koremc.protocol.readVarUInt
@@ -79,8 +81,9 @@ private const val MOB_ARMOR_EQUIPMENT = 32
 /** The input flag set on every tick a player sneaks. */
 private const val SNEAKING = 8
 
-/** The network ID of the diamond sword the tests hit with. */
+/** The network IDs of the diamond sword and iron axe the tests hit with. */
 private const val SWORD = 4
+private const val AXE = 5
 
 class PlayersTest {
     private val authority = TestAuthority()
@@ -93,14 +96,15 @@ class PlayersTest {
     private val creative = CreativeInventory(emptyList(), emptyList())
     private val helmet = item("minecraft:iron_helmet", 1)
     private val chestplate = item("minecraft:iron_chestplate", 2)
-    private val shield = item("minecraft:shield", 3)
+    private val shield = ItemDefinition("minecraft:shield", 3, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 336)
     private val sword = ItemDefinition("minecraft:diamond_sword", SWORD, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 1561)
+    private val axe = ItemDefinition("minecraft:iron_axe", AXE, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 250)
 
     /** What every player had when they last left, or null for players new to the world. */
     private var saved: NbtMap? = null
     private val game = GameData(
         world, emptyList(), org.koremc.protocol.BlockDefinitions(emptyList()), creative, emptyMap(), Drops(emptyList(), creative, palette),
-        items = ItemStacks(listOf(helmet, chestplate, shield, sword), creative, palette),
+        items = ItemStacks(listOf(helmet, chestplate, shield, sword, axe), creative, palette),
         players = object : PlayerSaves {
             override fun load(player: UUID) = saved
 
@@ -268,6 +272,64 @@ class PlayersTest {
         // Straight after, in the grace, a hit no harder does nothing.
         steve.attacks(2, held = SWORD)
         assertEquals(12f, alex.session.vitals.health)
+    }
+
+    @Test
+    fun `a player sneaking with a shield raises it, which blocks hits from in front once it's up, wearing for it and knocking the hitter back`() {
+        val steve = Client(1, "Steve", "1111")
+        val alex = Client(2, "Alex", "2222")
+        alex.session.give(ItemStack(shield))
+        // East of Steve, facing west, toward him.
+        alex.moves(Vec3(2.5f, -61.38f, 0.5f), yaw = 90f, inputs = listOf(SNEAKING))
+        steve.session.give(ItemStack(sword))
+        tick()
+        steve.received()
+        alex.session.tickHealth()
+        tick()
+        assertTrue(steve.received().any { it.contentEquals(SetActorData(2, listOf(secondFlagsItem(setOf(ActorFlag.BLOCKING)))).encode()) })
+
+        // Only just up, it doesn't block yet.
+        steve.attacks(2, held = SWORD)
+        assertEquals(12f, alex.session.vitals.health)
+
+        // A quarter of a second on, and after the grace from that hit, it does.
+        repeat(10) { alex.session.tickHealth() }
+        val health = alex.session.vitals.health
+        steve.received()
+        steve.attacks(2, held = SWORD)
+        assertEquals(health, alex.session.vitals.health)
+        assertEquals(8, alex.session.heldStack?.damage)
+        val got = steve.received()
+        assertTrue(got.any { it.contentEquals(SetActorMotion(1, Vec3(-0.45f, 0.3608f, 0f)).encode()) })
+        assertTrue(got.any { it.contentEquals(LevelSoundEvent(LevelSoundEvent.SHIELD_BLOCK, alex.session.position, -1).encode()) })
+    }
+
+    @Test
+    fun `a shield doesn't cover hits from behind, and an axe's hit disables it for five seconds`() {
+        val steve = Client(1, "Steve", "1111")
+        val alex = Client(2, "Alex", "2222")
+        alex.session.give(ItemStack(shield))
+        // East of Steve, facing east, away from him.
+        alex.moves(Vec3(2.5f, -61.38f, 0.5f), yaw = -90f, inputs = listOf(SNEAKING))
+        steve.session.give(ItemStack(axe))
+        tick()
+        repeat(10) { alex.session.tickHealth() }
+        steve.attacks(2, held = AXE)
+        assertEquals(14f, alex.session.vitals.health)
+
+        // Facing him, the shield blocks the axe once, wearing for it, and is disabled.
+        alex.moves(Vec3(2.5f, -61.38f, 0.5f), yaw = 90f, inputs = listOf(SNEAKING))
+        repeat(10) { alex.session.tickHealth() }
+        alex.received()
+        val health = alex.session.vitals.health
+        steve.attacks(2, held = AXE)
+        assertEquals(health, alex.session.vitals.health)
+        assertEquals(6, alex.session.heldStack?.damage)
+        assertTrue(alex.received().any { it.contentEquals(PlayerStartItemCooldown("shield", 100).encode()) })
+
+        // Down, it lets the next hit through.
+        steve.attacks(2, held = AXE)
+        assertEquals(health - 6f, alex.session.vitals.health)
     }
 
     @Test

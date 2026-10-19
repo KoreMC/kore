@@ -7,6 +7,8 @@ Each release, newest first, with the client version it's for. What's done since 
 - Players fight each other: hits hurt by the weapon, with Sharpness, Strength and Weakness, critical hits, knockback and Fire Aspect.
   The pvp game rule and a `combat` switch in `kore.jsonc` turn it off
 - A Totem of Undying in either hand saves a player from dying, but in the void
+- Shields: sneaking raises one, in either hand, which blocks hits from in front once it's up, wearing for it and knocking the
+  attacker back. An axe's hit disables it for five seconds
 - The console no longer shows players dying or respawning, only what they say and the commands they run
 - Players join and respawn facing south, looking straight ahead
 - Kore's own settings are in `kore.jsonc`, so editors take the comments in it. A `kore.json` from 0.1.0 is renamed to it
