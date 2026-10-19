@@ -105,6 +105,9 @@ enum class InputFlag(val id: Int) {
 
     /** Set on every tick the player bumps into something above or below, which is mostly standing on the ground. */
     VERTICAL_COLLISION(50),
+    /** A trident's Riptide spinning the player off, and done spinning. */
+    START_SPIN_ATTACK(56),
+    STOP_SPIN_ATTACK(57),
 }
 
 private val INPUT_FLAGS = InputFlag.entries.associateBy(InputFlag::id)

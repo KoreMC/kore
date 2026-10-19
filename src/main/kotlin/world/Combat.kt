@@ -99,6 +99,14 @@ private const val LEAST_FORCE = 0.1f
 const val BOW_SPEED = 3f
 const val CROSSBOW_SPEED = 3.15f
 
+/** How long a trident must be drawn back before it's thrown, in ticks, how fast it flies, in blocks a tick, and how hard it hits. */
+const val TRIDENT_CHARGE_TICKS = 10
+const val TRIDENT_SPEED = 4f
+const val TRIDENT_DAMAGE = 8f
+
+/** How much harder each level of Impaling makes a trident hit someone in water or rain. */
+private const val IMPALING_PER_LEVEL = 2.5f
+
 /** How long a crossbow takes to load, in ticks, and how much sooner each level of Quick Charge has it loaded. */
 private const val CROSSBOW_CHARGE_TICKS = 25
 private const val QUICK_CHARGE_TICKS = 5
@@ -222,6 +230,9 @@ fun crossbowMiddleTick(level: Int) = (crossbowChargeTicks(level) * LOADING_MIDDL
 
 /** How far through loading a crossbow sounds partway. */
 private const val LOADING_MIDDLE_SHARE = 16f / 25
+
+/** How much harder Impaling at [level] makes a trident hit someone in water or rain: two and a half points a level, rounded down. */
+fun impalingDamage(level: Int) = floor(IMPALING_PER_LEVEL * level)
 
 /** How much harder Power at [level] makes an arrow hurt, at a block a tick. */
 fun powerDamage(level: Int) = if (level > 0) POWER_PER_LEVEL * (level + 1) else 0f

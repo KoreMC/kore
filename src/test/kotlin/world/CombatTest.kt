@@ -149,6 +149,11 @@ class CombatTest {
     }
 
     @Test
+    fun `Impaling makes a trident hit someone in water or rain two and a half points harder a level, rounded down`() {
+        assertEquals(listOf(0f, 2f, 5f, 7f, 10f, 12f), (0..5).map(::impalingDamage))
+    }
+
+    @Test
     fun `each piece of netherite takes a tenth of a hit's knockback`() {
         assertNear(0.2f, knockbackResistance(listOf(item("netherite_helmet"), item("diamond_chestplate"), item("netherite_boots"), null)))
         assertEquals(0f, knockbackResistance(listOf(null, null, null, null)))

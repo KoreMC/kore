@@ -53,6 +53,9 @@ enum class ActorFlag(val bit: Int) {
     HAS_COLLISION(48),
     /** Without this, the player floats rather than falls. */
     HAS_GRAVITY(49),
+    /** A trident thrown with an enchantment, which shines, and one flying back to whoever threw it, by its Loyalty. */
+    ENCHANTED(52),
+    RETURN_TRIDENT(53),
     SWIMMING(57),
     /** Holding up a shield. */
     BLOCKING(72),

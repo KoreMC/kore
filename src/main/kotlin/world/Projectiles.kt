@@ -1,6 +1,9 @@
 package org.koremc.world
 
 import org.koremc.registry.ItemCooldown
+import org.koremc.registry.ItemStack
+import org.koremc.registry.LOYALTY
+import org.koremc.registry.levelOf
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.ceil
@@ -20,8 +23,9 @@ private const val DRAG = 0.01
 /** How much faster an ender pearl falls each tick, which the air doesn't slow. */
 private const val ENDER_PEARL_GRAVITY = 0.025
 
-/** How much faster an arrow falls each tick. */
+/** How much faster an arrow falls each tick, and a trident. */
 private const val ARROW_GRAVITY = 0.05
+private const val TRIDENT_GRAVITY = 0.1
 
 /** How far below its thrower's eyes a snowball or an arrow leaves their hand. */
 private const val EYE_DROP = 0.1f
@@ -46,6 +50,16 @@ private const val ARROW_LIFETIME = 60 * 20
 
 /** How much of its speed an arrow keeps, back the way it came, as it bounces off someone it didn't hurt. */
 private const val BOUNCE = -0.1f
+
+/** How much of its speed a trident keeps falling away from someone it hurt, back the way it came, across and up and down. */
+private const val FALL_AWAY_ACROSS = -0.01f
+private const val FALL_AWAY_UP = -0.1f
+
+/** How long a trident with Loyalty lies where it landed before it heads back, in ticks, and how it flies back, by each level of Loyalty. */
+private const val LOYALTY_WAIT = 4
+private const val LOYALTY_RISE = 0.015
+private const val LOYALTY_PULL = 0.05
+private const val LOYALTY_KEPT = 0.95
 
 /** How long an ender pearl's thrower waits to throw another, in ticks: a second, and how much it hurts them where it takes them, as a fall does. */
 private const val ENDER_PEARL_COOLDOWN = 20
@@ -81,6 +95,7 @@ enum class ProjectileKind(
     BLUE_EGG("minecraft:blue_egg", EGG_ENTITY, climate = 2),
     ENDER_PEARL("minecraft:ender_pearl", "minecraft:ender_pearl", ENDER_PEARL_GRAVITY, drag = 0.0, cooldown = ItemCooldown("ender_pearl", ENDER_PEARL_COOLDOWN)),
     ARROW(null, "minecraft:arrow", ARROW_GRAVITY, drop = EYE_DROP, sticks = true),
+    TRIDENT(null, "minecraft:thrown_trident", TRIDENT_GRAVITY, drop = EYE_DROP, sticks = true),
     ;
 
     /** Whether it's an egg, of any colour. */
@@ -114,10 +129,23 @@ data class ArrowShot(
 /**
  * Something thrown or shot, flying through the world: the entity [id], a
  * [kind], thrown by the entity [thrower], with its bottom at [position],
- * moving at [velocity] blocks a tick, and for an arrow, what it was shot
- * with, [arrow].
+ * moving at [velocity] blocks a tick, for an arrow, what it was shot with,
+ * [arrow], and for a trident, its [item], as worn and enchanted as it was,
+ * and whether it was thrown in creative, [fromCreative], which gives
+ * nothing back.
  */
-class Projectile(val id: Long, val kind: ProjectileKind, val thrower: Long, position: Vec3, velocity: Vec3, val arrow: ArrowShot? = null) {
+class Projectile(
+    val id: Long,
+    val kind: ProjectileKind,
+    val thrower: Long,
+    position: Vec3,
+    velocity: Vec3,
+    val arrow: ArrowShot? = null,
+    val item: ItemStack? = null,
+    val fromCreative: Boolean = false,
+) {
+    /** A trident's Loyalty, which brings it back to whoever threw it. */
+    val loyalty = item?.levelOf(LOYALTY) ?: 0
     var position = position
         private set
 
@@ -147,6 +175,16 @@ class Projectile(val id: Long, val kind: ProjectileKind, val thrower: Long, posi
     /** Those a piercing arrow's passed through, which it doesn't hit again. */
     val pierced = mutableSetOf<Long>()
 
+    /** Whether a trident's hurt someone, and hurts nobody else until it lands. */
+    var spent = false
+        private set
+
+    /** Whether a trident with Loyalty is flying back to whoever threw it, through whatever's in the way, and whether it set off this tick. */
+    var returning = false
+        private set
+    var setOffBack = false
+        private set
+
     /** Flies it a tick, to [to], moving at [velocity] now. */
     internal fun flown(to: Vec3, velocity: Vec3) {
         position = to
@@ -159,10 +197,11 @@ class Projectile(val id: Long, val kind: ProjectileKind, val thrower: Long, posi
         moved = true
     }
 
-    /** Sticks it at [at], in the block at [pos], still, pointing the way it flew in. */
+    /** Sticks it at [at], in the block at [pos], still, pointing the way it flew in, and for a trident that fell away from someone, ready to hurt again. */
     internal fun stick(at: Vec3, pos: BlockPos) {
         position = at
         velocity = Vec3(0f, 0f, 0f)
+        spent = false
         stuckIn = pos
         stuckFor = 0
         age++
@@ -184,6 +223,35 @@ class Projectile(val id: Long, val kind: ProjectileKind, val thrower: Long, posi
     /** Bounces it back off someone it didn't hurt, slower. */
     fun bounce() {
         velocity = Vec3(velocity.x * BOUNCE, velocity.y * BOUNCE, velocity.z * BOUNCE)
+    }
+
+    /** Has a trident fall away from someone it hurt, hurting nobody else until it lands. */
+    fun fallAway() {
+        velocity = Vec3(velocity.x * FALL_AWAY_ACROSS, velocity.y * FALL_AWAY_UP, velocity.z * FALL_AWAY_ACROSS)
+        spent = true
+    }
+
+    /** Sets a trident with Loyalty off back to whoever threw it. */
+    internal fun setOffBack() {
+        stuckIn = null
+        stuckFor = 0
+        returning = true
+        setOffBack = true
+    }
+
+    /** Flies a returning trident a tick toward [eyes], whoever threw it, moving at [velocity], rising toward them by [rise]. */
+    internal fun flyBack(velocity: Vec3, rise: Float) {
+        flown(Vec3(position.x + velocity.x, position.y + rise + velocity.y, position.z + velocity.z), velocity)
+    }
+
+    /** Lets a returning trident whose thrower's gone fall where it is. */
+    internal fun stopReturning() {
+        returning = false
+    }
+
+    /** Starts a tick, forgetting what happened in the last. */
+    internal fun startTick() {
+        setOffBack = false
     }
 }
 
@@ -215,18 +283,31 @@ fun lookVector(yaw: Float, pitch: Float): Vec3 {
  * faster, and it goes as far as it's going, unless it hits a block, or one
  * of [targets], boxes by their entity's ID, on the way there, but for
  * whoever threw it while it leaves their hand. One that hits stops where it
- * hit and goes, as one that falls out of the world does, but for an arrow:
- * one that hits a block sticks in it, until the block goes or a minute
- * passes, and one that hits someone stays, to go once it's hurt them, or
- * bounce off. Returns what each that hit, hit.
+ * hit and goes, as one that falls out of the world does, but for an arrow
+ * or a trident: one that hits a block sticks in it, until the block goes,
+ * an arrow for a minute, and one that hits someone stays, to go once it's
+ * hurt them, or bounce off. A trident with Loyalty heads back to whoever
+ * threw it, by their [eyes], once it's landed, or fallen out of the world,
+ * flying through whatever's in the way. Returns what each that hit, hit.
  */
-internal fun FlatWorld.tickProjectiles(targets: Map<Long, Box>): List<ProjectileHit> {
+internal fun FlatWorld.tickProjectiles(targets: Map<Long, Box>, eyes: Map<Long, Vec3> = emptyMap()): List<ProjectileHit> {
     val hits = mutableListOf<ProjectileHit>()
     for (projectile in projectiles.toList()) {
+        projectile.startTick()
+        val home = eyes[projectile.thrower]
+        if (projectile.returning) {
+            if (home != null) {
+                flyBack(projectile, home)
+                continue
+            }
+            projectile.stopReturning()
+        }
         val stuck = projectile.stuckIn
         if (stuck != null) {
             if (stateAt(stuck)?.solidHeights() != null) {
-                if (projectile.stayStuck() > ARROW_LIFETIME) removeProjectile(projectile.id)
+                val stuckFor = projectile.stayStuck()
+                if (projectile.loyalty > 0 && home != null && stuckFor > LOYALTY_WAIT) projectile.setOffBack()
+                else if (projectile.kind == ProjectileKind.ARROW && stuckFor > ARROW_LIFETIME) removeProjectile(projectile.id)
                 continue
             }
             projectile.unstick()
@@ -238,7 +319,7 @@ internal fun FlatWorld.tickProjectiles(targets: Map<Long, Box>): List<Projectile
         val to = Vec3(from.x + velocity.x, from.y + velocity.y, from.z + velocity.z)
         val blocked = firstBlockBetween(from, to)
         val struck = targets.asSequence()
-            .filter { (id, _) -> (id != projectile.thrower || projectile.age >= THROWER_MISSED_FOR) && id !in projectile.pierced }
+            .filter { (id, _) -> (id != projectile.thrower || projectile.age >= THROWER_MISSED_FOR) && id !in projectile.pierced && !projectile.spent }
             .mapNotNull { (id, box) -> box.grown(HIT_REACH).enteredAlong(from, to)?.let { id to it } }
             .minByOrNull { it.second }
         val hit = when {
@@ -248,9 +329,23 @@ internal fun FlatWorld.tickProjectiles(targets: Map<Long, Box>): List<Projectile
         }
         if (hit is ProjectileHit.Block && kind.sticks) projectile.stick(hit.at, hit.pos) else projectile.flown(hit?.at ?: to, velocity)
         if (hit != null) hits += hit
-        if ((hit != null && !kind.sticks) || to.y < MIN_Y - VOID_DEPTH) removeProjectile(projectile.id)
+        val fallenOut = to.y < MIN_Y - VOID_DEPTH
+        if (fallenOut && projectile.loyalty > 0 && home != null) projectile.setOffBack()
+        else if ((hit != null && !kind.sticks) || fallenOut) removeProjectile(projectile.id)
     }
     return hits
+}
+
+/** Flies a returning [trident] a tick toward [eyes], whoever threw it: it rises toward them, and is drawn their way, the harder for each level of Loyalty. */
+private fun flyBack(trident: Projectile, eyes: Vec3) {
+    val dx = (eyes.x - trident.position.x).toDouble()
+    val dy = (eyes.y - trident.position.y).toDouble()
+    val dz = (eyes.z - trident.position.z).toDouble()
+    val length = sqrt(dx * dx + dy * dy + dz * dz).takeIf { it > 0 } ?: 1.0
+    val pull = LOYALTY_PULL * trident.loyalty
+    val v = trident.velocity
+    val velocity = Vec3((v.x * LOYALTY_KEPT + dx / length * pull).toFloat(), (v.y * LOYALTY_KEPT + dy / length * pull).toFloat(), (v.z * LOYALTY_KEPT + dz / length * pull).toFloat())
+    trident.flyBack(velocity, (dy * LOYALTY_RISE * trident.loyalty).toFloat())
 }
 
 /** The point [share] of the way from [from] to [to]. */

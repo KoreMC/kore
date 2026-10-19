@@ -57,6 +57,7 @@ import org.koremc.registry.ItemDefinition
 import org.koremc.registry.ItemStack
 import org.koremc.registry.ItemStacks
 import org.koremc.registry.ItemVersion
+import org.koremc.registry.LOYALTY
 import org.koremc.registry.MULTISHOT
 import org.koremc.registry.THORNS
 import org.koremc.registry.WIND_BURST
@@ -105,6 +106,7 @@ private const val ENDER_PEARL = 8
 private const val BOW = 9
 private const val ARROW = 10
 private const val CROSSBOW = 11
+private const val TRIDENT = 12
 
 /** The input flag set on the tick a player lands. */
 private const val VERTICAL_COLLISION = 50
@@ -129,12 +131,13 @@ class PlayersTest {
     private val bow = ItemDefinition("minecraft:bow", BOW, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 385)
     private val arrow = ItemDefinition("minecraft:arrow", ARROW, componentBased = false, ItemVersion.NONE)
     private val crossbow = ItemDefinition("minecraft:crossbow", CROSSBOW, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 466)
+    private val trident = ItemDefinition("minecraft:trident", TRIDENT, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 251)
 
     /** What every player had when they last left, or null for players new to the world. */
     private var saved: NbtMap? = null
     private val game = GameData(
         world, emptyList(), org.koremc.protocol.BlockDefinitions(emptyList()), creative, emptyMap(), Drops(emptyList(), creative, palette),
-        items = ItemStacks(listOf(helmet, chestplate, shield, sword, axe, mace, snowball, enderPearl, bow, arrow, crossbow), creative, palette),
+        items = ItemStacks(listOf(helmet, chestplate, shield, sword, axe, mace, snowball, enderPearl, bow, arrow, crossbow, trident), creative, palette),
         players = object : PlayerSaves {
             override fun load(player: UUID) = saved
 
@@ -568,6 +571,52 @@ class PlayersTest {
     }
 
     @Test
+    fun `a trident drawn back and let go flies from the hand, worn a use, hurts whoever it hits, falls away, and is picked up again`() {
+        val steve = Client(1, "Steve", "1111")
+        val alex = Client(2, "Alex", "2222")
+        alex.moves(Vec3(8.5f, -61.38f, 0.5f))
+        tick()
+        steve.session.give(ItemStack(trident))
+
+        // Steve, at the spawn, throws east, at Alex, drawn back half a second.
+        steve.moves(Vec3(0.5f, -61.38f, 0.5f), yaw = -90f)
+        steve.throws(TRIDENT)
+        repeat(10) { steve.session.tickHealth() }
+        steve.releases(TRIDENT)
+        assertEquals(null, steve.session.heldStack)
+        val thrown = world.projectiles.single()
+        assertEquals(1, thrown.item?.damage)
+        repeat(20) { clients.map { it.session }.flyProjectiles(game) }
+
+        assertEquals(12f, alex.session.vitals.health)
+        assertTrue(alex.received().any { it.contentEquals(ActorEvent(2, ActorEvent.HURT, DamageCause.TRIDENT.id).encode()) })
+        assertTrue(thrown.stuckIn != null && thrown.position.x < 9f, "it fell away and landed by Alex, at ${thrown.position}")
+
+        // Anyone picks up one with no Loyalty.
+        alex.session.collectProjectiles()
+        assertEquals(ItemStack(trident).withDamage(1), alex.session.heldStack)
+        assertTrue(world.projectiles.isEmpty())
+    }
+
+    @Test
+    fun `a trident with Loyalty comes back to whoever threw it, into their hand`() {
+        val steve = Client(1, "Steve", "1111")
+        steve.session.give(ItemStack(trident).withEnchantments(listOf(EnchantmentLevel(LOYALTY, 3))))
+        // Straight down, onto the stone.
+        steve.moves(Vec3(0.5f, -61.38f, 0.5f), pitch = 90f)
+        steve.throws(TRIDENT)
+        repeat(10) { steve.session.tickHealth() }
+        steve.releases(TRIDENT)
+        repeat(40) {
+            clients.map { it.session }.flyProjectiles(game)
+            steve.session.collectProjectiles()
+        }
+
+        assertTrue(world.projectiles.isEmpty())
+        assertEquals("minecraft:trident", steve.session.heldStack?.item?.name)
+    }
+
+    @Test
     fun `an arrow stuck in a block is picked up, but gives an arrow back only if it was used up shooting it`() {
         val steve = Client(1, "Steve", "1111")
         val landed = world.spawnProjectile(ProjectileKind.ARROW, thrower = 9, Vec3(4.5f, -62.5f, 0.5f), Vec3(0f, -1f, 0f), ArrowShot(2f))
@@ -576,7 +625,7 @@ class PlayersTest {
 
         // Steve walks up to where they landed.
         steve.moves(Vec3(4.5f, -61.38f, 0.5f))
-        steve.session.collectArrows()
+        steve.session.collectProjectiles()
         assertEquals(1, steve.session.clearItems(0) { it.item == arrow })
         assertTrue(landed !in world.projectiles && spared !in world.projectiles)
     }

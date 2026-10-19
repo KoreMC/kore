@@ -4,6 +4,12 @@ import org.cloudburstmc.nbt.NbtMap
 import org.koremc.registry.AIR
 import org.koremc.registry.BlockPalette
 import org.koremc.registry.BlockState
+import org.koremc.registry.EnchantmentLevel
+import org.koremc.registry.ItemDefinition
+import org.koremc.registry.ItemStack
+import org.koremc.registry.ItemVersion
+import org.koremc.registry.LOYALTY
+import org.koremc.registry.withEnchantments
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -69,6 +75,36 @@ class ProjectilesTest {
         assertTrue(other in world.projectiles)
         world.tickProjectiles(emptyMap())
         assertTrue(other !in world.projectiles)
+    }
+
+    private val trident = ItemDefinition("minecraft:trident", 1, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 251)
+
+    @Test
+    fun `a trident stays where it lands for good, but one with Loyalty heads back to whoever threw it, through what's in the way`() {
+        val plain = world.spawnProjectile(ProjectileKind.TRIDENT, thrower = 1, Vec3(0.5f, -62.5f, 0.5f), Vec3(0f, -1f, 0f), item = ItemStack(trident))
+        val loyal = world.spawnProjectile(
+            ProjectileKind.TRIDENT, thrower = 1, Vec3(4.5f, -62.5f, 0.5f), Vec3(0f, -1f, 0f), item = ItemStack(trident).withEnchantments(listOf(EnchantmentLevel(LOYALTY, 3))),
+        )
+        val eyes = mapOf(1L to Vec3(4.5f, -50f, 0.5f))
+        world.tickProjectiles(emptyMap(), eyes)
+        assertTrue(plain.stuckIn != null && loyal.stuckIn != null)
+
+        repeat(5) { world.tickProjectiles(emptyMap(), eyes) }
+        assertTrue(loyal.returning && loyal.setOffBack)
+        repeat(10) { world.tickProjectiles(emptyMap(), eyes) }
+        assertTrue(loyal.position.y > -60f, "it's on its way up to them, at ${loyal.position}")
+
+        repeat(1300) { world.tickProjectiles(emptyMap(), eyes) }
+        assertTrue(plain in world.projectiles && plain.stuckIn != null, "it never goes")
+    }
+
+    @Test
+    fun `a trident with Loyalty that falls out of the world heads back rather than going`() {
+        val loyal = world.spawnProjectile(
+            ProjectileKind.TRIDENT, thrower = 1, Vec3(0.5f, MIN_Y - 63.5f, 0.5f), Vec3(0f, -1f, 0f), item = ItemStack(trident).withEnchantments(listOf(EnchantmentLevel(LOYALTY, 1))),
+        )
+        world.tickProjectiles(emptyMap(), mapOf(1L to Vec3(0.5f, -61.38f, 0.5f)))
+        assertTrue(loyal in world.projectiles && loyal.returning)
     }
 
     @Test

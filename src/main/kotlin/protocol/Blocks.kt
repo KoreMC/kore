@@ -338,6 +338,18 @@ data class LevelSoundEvent(
         const val CROSSBOW_QUICK_CHARGE_MIDDLE = "crossbow.quick_charge.middle"
         const val CROSSBOW_QUICK_CHARGE_END = "crossbow.quick_charge.end"
         const val CROSSBOW_SHOOT = "crossbow.shoot"
+
+        /**
+         * A trident thrown, hitting someone, hitting the ground, setting off
+         * back to whoever threw it, calling lightning, and launching the
+         * player by its Riptide, at each of its levels.
+         */
+        const val TRIDENT_THROW = "item.trident.throw"
+        const val TRIDENT_HIT = "item.trident.hit"
+        const val TRIDENT_HIT_GROUND = "item.trident.hit_ground"
+        const val TRIDENT_RETURN = "item.trident.return"
+        const val TRIDENT_THUNDER = "item.trident.thunder"
+        val TRIDENT_RIPTIDE = listOf("item.trident.riptide_1", "item.trident.riptide_2", "item.trident.riptide_3")
     }
 }
 

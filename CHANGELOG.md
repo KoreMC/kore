@@ -15,6 +15,8 @@ Each release, newest first, with the client version it's for. What's done since 
 - Bows shoot arrows as hard as they're drawn, critically when drawn all the way, with Power, Punch, Flame and Infinity, and
   tipped arrows. Crossbows load and fire, with Quick Charge, Multishot and Piercing. Arrows stick in what they hit, and are
   picked up again, giving back those that were used up
+- Tridents are thrown, hurting whoever they hit, the more with Impaling in water or rain, and stay where they land. Loyalty
+  brings one back, Channeling calls lightning in a thunderstorm, and Riptide spins its thrower off in water or rain
 - The mace smashes, struck from a fall of a block and a half or more: harder for every block, with Density, and the fall then
   does its wielder no harm. Breach gets past armour, and Wind Burst launches the wielder back up
 - The console no longer shows players dying or respawning, only what they say and the commands they run

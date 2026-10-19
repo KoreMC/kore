@@ -166,6 +166,7 @@ import org.koremc.registry.AIR
 import org.koremc.registry.AIR_NETWORK_ID
 import org.koremc.registry.BREACH
 import org.koremc.registry.BlockState
+import org.koremc.registry.CHANNELING
 import org.koremc.registry.DENSITY
 import org.koremc.registry.EFFICIENCY
 import org.koremc.registry.FIRE_ASPECT
@@ -174,6 +175,7 @@ import org.koremc.registry.FLAME
 import org.koremc.registry.FROST_WALKER
 import org.koremc.registry.Food
 import org.koremc.registry.FoodAction
+import org.koremc.registry.IMPALING
 import org.koremc.registry.INFINITY
 import org.koremc.registry.ItemStack
 import org.koremc.registry.ItemStacks
@@ -185,11 +187,13 @@ import org.koremc.registry.POWER
 import org.koremc.registry.PUNCH
 import org.koremc.registry.QUICK_CHARGE
 import org.koremc.registry.RESPIRATION
+import org.koremc.registry.RIPTIDE
 import org.koremc.registry.THORNS
 import org.koremc.registry.VANISHING
 import org.koremc.registry.WIND_BURST
 import org.koremc.registry.customName
 import org.koremc.registry.damage
+import org.koremc.registry.enchantments
 import org.koremc.registry.levelOf
 import org.koremc.registry.mendedBy
 import org.koremc.registry.sameKindAs
@@ -315,11 +319,15 @@ import org.koremc.world.Surroundings
 import org.koremc.world.THORNS_WEAR
 import org.koremc.world.THROW_SPEED
 import org.koremc.world.TIPPED_SHARE
+import org.koremc.world.TRIDENT_CHARGE_TICKS
+import org.koremc.world.TRIDENT_DAMAGE
+import org.koremc.world.TRIDENT_SPEED
 import org.koremc.world.Vec3
 import org.koremc.world.Vitals
 import org.koremc.world.WELL_FED
 import org.koremc.world.WRITABLE_BOOK
 import org.koremc.world.WRITTEN_BOOK
+import org.koremc.world.WorldEvent
 import org.koremc.world.armourOf
 import org.koremc.world.armourWear
 import org.koremc.world.arrowDamage
@@ -362,6 +370,7 @@ import org.koremc.world.hasCandle
 import org.koremc.world.hasGlowBerries
 import org.koremc.world.heightMap
 import org.koremc.world.ignite
+import org.koremc.world.impalingDamage
 import org.koremc.world.isBlockedOpen
 import org.koremc.world.isCake
 import org.koremc.world.isCandle
@@ -421,6 +430,7 @@ import org.koremc.world.solidHeights
 import org.koremc.world.songTitleIn
 import org.koremc.world.stepOn
 import org.koremc.world.storage
+import org.koremc.world.strike
 import org.koremc.world.surroundings
 import org.koremc.world.takeFromFrame
 import org.koremc.world.thornsPrick
@@ -669,6 +679,7 @@ private const val PLAYER_ENTITY = "minecraft:player"
 /** A bow, and a crossbow, and what they shoot, as the game names them, and where a loaded crossbow's NBT keeps what it's loaded with. */
 private const val BOW = "minecraft:bow"
 private const val CROSSBOW = "minecraft:crossbow"
+private const val TRIDENT = "minecraft:trident"
 private const val ARROW = "minecraft:arrow"
 private const val CHARGED_ITEM = "chargedItem"
 
@@ -1491,6 +1502,8 @@ class Session(
         if (InputFlag.START_GLIDING in inputs) gliding = true
         if (InputFlag.STOP_GLIDING in inputs) gliding = false
         if (InputFlag.START_JUMPING in inputs) exhaust(if (sprinting) SPRINT_JUMP_EXHAUSTION else JUMP_EXHAUSTION)
+        if (InputFlag.START_SPIN_ATTACK in inputs) log.debug("{} started spinning", name)
+        if (InputFlag.STOP_SPIN_ATTACK in inputs) log.debug("{} stopped spinning", name)
         if (InputFlag.START_SPRINTING in inputs) {
             sprinting = true
             sneaking = false
@@ -2035,7 +2048,7 @@ class Session(
             InventoryTransaction.USE_ITEM -> packet.use?.let { onItemUse(it, tick, packet.legacyRequestId) }
             InventoryTransaction.RELEASE_ITEM -> {
                 eating = null
-                drawing?.let(::loose)
+                drawing?.let { if (inventory.items[it.slot]?.stack?.item?.name == TRIDENT) throwTrident(it) else loose(it) }
                 drawing = null
                 loading = null
             }
@@ -2127,7 +2140,7 @@ class Session(
         armourSlotFor(held.stack.item.name)?.let { return putOn(it, held, legacyRequestId) }
         held.stack.item.food?.let { return eatFrom(held, it, tick ?: aliveTicks.toLong()) }
         ProjectileKind.thrownFrom(held.stack.item.name)?.let { return throwHeld(it) }
-        if (held.stack.item.name == BOW) return draw()
+        if (held.stack.item.name == BOW || held.stack.item.name == TRIDENT) return draw(held)
         if (held.stack.item.name == CROSSBOW) return useCrossbow(held)
         if (held.stack.item.name != EMPTY_MAP) return
         val blank = game.items.of(FILLED_MAP) ?: return
@@ -2161,14 +2174,55 @@ class Session(
     }
 
     /**
-     * The player starting to draw the bow they hold, unless projectiles are
-     * switched off, or they've no arrow to shoot, outside creative. The
+     * The player starting to draw back the bow or trident they hold, [held],
+     * unless projectiles are switched off, they've no arrow to shoot from a
+     * bow, outside creative, or the trident's worn to its last use. The
      * client goes on asking while they hold use down, which doesn't start it
      * over.
      */
-    private fun draw() {
-        if (!world.features.projectiles || (!creative && arrowToShoot() == null)) return
+    private fun draw(held: SlotStack) {
+        if (!world.features.projectiles) return
+        val bow = held.stack.item.name == BOW
+        if (bow && !creative && arrowToShoot() == null) return
+        if (!bow && held.stack.damage >= held.stack.item.maxDurability - 1) return
         if (drawing?.slot != heldSlot) drawing = Drawing(heldSlot, aliveTicks)
+    }
+
+    /** Whether the player's in water or out in the rain, where Impaling hurts them more and Riptide launches them. */
+    private val inWaterOrRain get() = world.isWet(feet.toBlockPos()) || world.isWet(position.toBlockPos()) || world.rainingAt(position.toBlockPos())
+
+    /**
+     * Throws the trident the player [drawn] back, as they let go: unless
+     * they let go too soon, it flies from a little below their eyes, the way
+     * they look, worn a use, leaving their hand, but in creative, where it
+     * stays. A trident with Riptide isn't thrown, but launches them, in
+     * water or rain, which their client does itself. Everyone around hears
+     * it.
+     */
+    private fun throwTrident(drawn: Drawing) {
+        val held = inventory.items[drawn.slot]?.takeIf { drawn.slot == heldSlot && it.stack.item.name == TRIDENT } ?: return
+        if (aliveTicks - drawn.since < TRIDENT_CHARGE_TICKS) return
+        val riptide = held.stack.levelOf(RIPTIDE)
+        if (riptide > 0) {
+            if (!inWaterOrRain) return
+            if (!creative) wearHeld(1, unforeseen = true)
+            showAround(position.toBlockPos(), LevelSoundEvent(LevelSoundEvent.TRIDENT_RIPTIDE[minOf(riptide, 3) - 1], position, -1))
+            log.debug("{} spun off by Riptide {}", name, riptide)
+            return
+        }
+        val trident = if (creative) held.stack else held.stack.worn(1) ?: return
+        val look = lookVector(yaw, pitch)
+        val from = eyes()
+        world.spawnProjectile(
+            ProjectileKind.TRIDENT, entityId, Vec3(from.x, from.y - ProjectileKind.TRIDENT.drop, from.z),
+            Vec3(look.x * TRIDENT_SPEED, look.y * TRIDENT_SPEED, look.z * TRIDENT_SPEED), item = trident, fromCreative = creative,
+        )
+        if (!creative) {
+            inventory.items[heldSlot] = null
+            send(slotOf(heldSlot))
+        }
+        showAround(position.toBlockPos(), LevelSoundEvent(LevelSoundEvent.TRIDENT_THROW, position, -1))
+        log.debug("{} threw their trident", name)
     }
 
     /**
@@ -3309,18 +3363,22 @@ class Session(
             if (!projectile.moved) continue
             val landed = projectile.stuckIn != null
             packets += MoveActorAbsolute(projectile.id, projectile.position, onGround = false, teleport = landed, pitch = projectile.pitch, yaw = projectile.yaw)
-            // An arrow that's landed trails no sparks.
-            if (landed && projectile.arrow?.critical == true) packets += SetActorData(projectile.id, listOf(flagsItem(setOf(ActorFlag.HAS_GRAVITY, ActorFlag.CAN_CLIMB) + flagsOf(projectile))))
+            // An arrow that's landed trails no sparks, and a trident setting off back shows it.
+            if ((landed && projectile.arrow?.critical == true) || projectile.setOffBack) {
+                packets += SetActorData(projectile.id, listOf(flagsItem(setOf(ActorFlag.HAS_GRAVITY, ActorFlag.CAN_CLIMB) + flagsOf(projectile))))
+            }
         }
         shownProjectiles.retainAll(ids)
         shownProjectiles += ids
         if (packets.isNotEmpty()) send(*packets.toTypedArray())
     }
 
-    /** The flags of [projectile]'s own: an arrow's sparks, while it flies, and its fire. */
+    /** The flags of [projectile]'s own: an arrow's sparks, while it flies, and its fire, and a trident's shine, and flying back. */
     private fun flagsOf(projectile: Projectile) = setOfNotNull(
         ActorFlag.CRITICAL.takeIf { projectile.arrow?.critical == true && projectile.stuckIn == null },
         ActorFlag.ON_FIRE.takeIf { projectile.arrow?.burns == true },
+        ActorFlag.ENCHANTED.takeIf { projectile.item?.enchantments?.isNotEmpty() == true },
+        ActorFlag.RETURN_TRIDENT.takeIf { projectile.returning },
     )
 
     /** Where the player can be hit, as tall as they are now. */
@@ -3366,26 +3424,67 @@ class Session(
     }
 
     /**
+     * The player hit by [trident], thrown by [thrower]: unless it's another
+     * player's and the pvp rule says no, or their shield covers it, it hurts
+     * them, the more for Impaling if they're in water or rain, and if it's
+     * their first hurt in a while, knocks them back the way it flew. The
+     * Thorns on what they wear may prick whoever threw it. Returns whether
+     * it hurt them: one that did falls away, and one that didn't bounces off.
+     */
+    internal fun stabbedBy(trident: Projectile, thrower: Session?): Boolean {
+        if (thrower != null && thrower !== this && !world.rules.pvp) return false
+        val impaling = if (inWaterOrRain) impalingDamage(trident.item?.levelOf(IMPALING) ?: 0) else 0f
+        val damage = TRIDENT_DAMAGE + impaling
+        if (blocks(trident.position, weapon = null, damage)) return false
+        val fresh = !vitals.inGrace
+        if (!hurt(damage, DamageCause.TRIDENT, by = thrower)) return false
+        val flew = trident.velocity
+        if (fresh) knockBack(Vec3(feet.x - flew.x, feet.y, feet.z - flew.z), extra = 0f)
+        if (thrower != null && thrower !== this && !dead) prick(thrower)
+        return true
+    }
+
+    /** Whether lightning would strike the player for a trident's Channeling: out in the rain, in a thunderstorm. */
+    internal val channelsLightning get() = world.weather.thundering && world.rainingAt(position.toBlockPos())
+
+    /**
      * Picks up the arrows stuck in blocks within the player's reach: one
      * that was used up shooting it goes among their items, as their arrow,
      * tipped as it was, as there's room for it, and one spared being used
      * up, by creative or Infinity, goes, giving them nothing. Those around
-     * see it fly to them. Run once a tick.
+     * see it fly to them. Tridents are picked up too, as they were thrown,
+     * by anyone, but one with Loyalty, or thrown in creative, which gives
+     * nothing back, only by whoever threw it, who picks up one flying back
+     * to them as it reaches them. Run once a tick.
      */
-    fun collectArrows() {
+    fun collectProjectiles() {
         if (state != State.IN_GAME || gameMode == GameMode.SPECTATOR || dead) return
         val reach = hitbox.grown(ARROW_PICKUP_ACROSS, ARROW_PICKUP_UP)
-        for (arrow in world.projectiles.filter { it.stuckIn != null && it.arrow != null && it.stuckFor > ARROW_PICKUP_DELAY }) {
-            if (!reach.overlaps(Box.around(arrow.position))) continue
-            if (arrow.arrow?.returned == true) {
-                val stack = game.items.of(ARROW, aux = arrow.arrow.potion?.plus(1) ?: 0) ?: continue
+        for (projectile in world.projectiles.filter(::canPickUp)) {
+            if (!reach.overlaps(Box.around(projectile.position))) continue
+            val stack = when {
+                projectile.arrow?.returned == true -> game.items.of(ARROW, aux = projectile.arrow.potion?.plus(1) ?: 0) ?: continue
+                projectile.kind == ProjectileKind.TRIDENT && !projectile.fromCreative -> projectile.item ?: continue
+                else -> null
+            }
+            if (stack != null) {
                 val (slots, left) = inventory.add(stack)
                 if (left > 0) continue
                 send(*slots.map(::slotOf).toTypedArray())
             }
-            showAround(arrow.position.toBlockPos(), TakeItemActor(arrow.id, entityId))
-            world.removeProjectile(arrow.id)
+            showAround(projectile.position.toBlockPos(), TakeItemActor(projectile.id, entityId))
+            world.removeProjectile(projectile.id)
         }
+    }
+
+    /** Whether the player could pick [projectile] up, coming within reach of it: an arrow or a trident that's landed, or flying back to them. */
+    private fun canPickUp(projectile: Projectile) = when (projectile.kind) {
+        ProjectileKind.ARROW -> projectile.stuckIn != null && projectile.stuckFor > ARROW_PICKUP_DELAY
+        ProjectileKind.TRIDENT -> {
+            val theirs = projectile.thrower == entityId
+            (theirs || (projectile.loyalty == 0 && !projectile.fromCreative)) && (projectile.returning || (projectile.stuckIn != null && projectile.stuckFor > ARROW_PICKUP_DELAY))
+        }
+        else -> false
     }
 
     /** Takes the player to [at], where an ender pearl they threw landed, which hurts them as a fall does, unless they've died since. */
@@ -3917,7 +4016,8 @@ class Session(
         val sharpness = sharpnessDamage(held)
         // A harder hit in the grace after the last hurts by as much harder as it is, but knocks nobody back.
         val fresh = !target.vitals.inGrace
-        val damage = withStrength(attackDamage(held), effects.level(Effect.STRENGTH), effects.level(Effect.WEAKNESS)) + sharpness +
+        val impaling = if (target.inWaterOrRain) impalingDamage(held?.levelOf(IMPALING) ?: 0) else 0f
+        val damage = withStrength(attackDamage(held), effects.level(Effect.STRENGTH), effects.level(Effect.WEAKNESS)) + sharpness + impaling +
             (fallen?.let { smashDamage(it, held?.levelOf(DENSITY) ?: 0) } ?: 0f)
         if (target.blocks(feet, held, if (crit) critical(damage) else damage)) {
             // Fire Aspect sets them burning all the same, and the shield knocks the player back.
@@ -4734,10 +4834,17 @@ internal fun Collection<Session>.showAround(packets: List<Pair<BlockPos, ServerP
  */
 internal fun Collection<Session>.flyProjectiles(game: GameData) {
     val players = filter { it.isInGame && !it.dead && it.gameMode != GameMode.SPECTATOR }
-    for (hit in game.world.tickProjectiles(players.associate { it.entityId to it.hitbox })) {
+    val hits = game.world.tickProjectiles(players.associate { it.entityId to it.hitbox }, players.associate { it.entityId to it.position })
+    // A trident setting off back to whoever threw it calls out.
+    for (trident in game.world.projectiles.filter { it.setOffBack }) showAround(listOf(trident.position.toBlockPos() to LevelSoundEvent(LevelSoundEvent.TRIDENT_RETURN, trident.position, -1)))
+    for (hit in hits) {
         val projectile = hit.projectile
         val thrower = players.find { it.entityId == projectile.thrower }
         val target = (hit as? ProjectileHit.Entity)?.let { struck -> players.find { it.entityId == struck.entityId } }
+        if (projectile.kind == ProjectileKind.TRIDENT) {
+            landTrident(hit, target, thrower, game)
+            continue
+        }
         if (projectile.kind == ProjectileKind.ARROW) {
             // An arrow that hurts its target goes, and one that doesn't bounces off. One that hits a block quivers in it.
             if (hit is ProjectileHit.Entity) {
@@ -4758,6 +4865,28 @@ internal fun Collection<Session>.flyProjectiles(game: GameData) {
         showAround(burst(projectile.kind, hit.at, game).map { hit.at.toBlockPos() to it })
         if (projectile.kind == ProjectileKind.ENDER_PEARL) thrower?.arriveByPearl(hit.at)
     }
+}
+
+/**
+ * Lands the trident that made [hit] on [target], thrown by [thrower]: one
+ * that hurts them falls away, calling lightning down on them with
+ * Channeling, if they're out in the rain in a thunderstorm, and one that
+ * doesn't bounces off. Everyone around hears it hit, or hit the ground.
+ */
+private fun Collection<Session>.landTrident(hit: ProjectileHit, target: Session?, thrower: Session?, game: GameData) {
+    val trident = hit.projectile
+    val sound = if (hit is ProjectileHit.Entity) LevelSoundEvent.TRIDENT_HIT else LevelSoundEvent.TRIDENT_HIT_GROUND
+    showAround(listOf(hit.at.toBlockPos() to LevelSoundEvent(sound, hit.at, -1)))
+    if (hit !is ProjectileHit.Entity) return
+    if (target?.stabbedBy(trident, thrower) != true) return trident.bounce()
+    trident.fallAway()
+    if ((trident.item?.levelOf(CHANNELING) ?: 0) == 0 || !target.channelsLightning) return
+    val changed = mutableListOf<BlockPos>()
+    val events = mutableListOf<WorldEvent>()
+    val bolt = game.world.strike(target.feet.toBlockPos(), changed, events)
+    showAround(game.world.packetsFor(Changes(emptyMap(), changed.distinct(), events = events)))
+    showAround(listOf(hit.at.toBlockPos() to LevelSoundEvent(LevelSoundEvent.TRIDENT_THUNDER, hit.at, -1)))
+    forEach { it.struckNear(bolt.position) }
 }
 
 /** How long an arrow quivers as it sticks in a block, in ticks. */
@@ -5060,7 +5189,7 @@ class Sessions(
         game.world.tickOrbs(sessions.values.mapNotNull { it.orbTarget })
         sessions.values.flyProjectiles(game)
         sessions.values.forEach { it.collectItems() }
-        sessions.values.forEach { it.collectArrows() }
+        sessions.values.forEach { it.collectProjectiles() }
         sessions.values.forEach { it.collectOrbs() }
         sessions.values.forEach { it.syncItems() }
         sessions.values.forEach { it.syncOrbs() }

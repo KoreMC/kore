@@ -51,6 +51,7 @@ enum class DamageCause(
     // Something another player threw or shot, which the message names them for.
     PROJECTILE(3, "death.attack.thrown", armour = true),
     ARROW(3, "death.attack.arrow", armour = true),
+    TRIDENT(3, "death.attack.trident", armour = true),
     MAGIC(14, "death.attack.magic", armour = false),
     WITHER(15, "death.attack.wither", armour = false),
     STARVATION(16, "death.attack.starve", armour = false, resisted = false),
