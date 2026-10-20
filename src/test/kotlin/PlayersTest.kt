@@ -10,6 +10,7 @@ import org.koremc.auth.TestAuthority
 import org.koremc.auth.ecKeyPair
 import org.koremc.protocol.ActorDataId
 import org.koremc.protocol.AddEffectCloud
+import org.koremc.protocol.AddProjectile
 import org.koremc.protocol.ActorEvent
 import org.koremc.protocol.ARMOUR_WINDOW
 import org.koremc.protocol.ActorFlag
@@ -642,6 +643,11 @@ class PlayersTest {
         // Straight down, at Steve's feet.
         steve.moves(Vec3(0.5f, -61.38f, 0.5f), pitch = 90f)
         steve.throws(LINGERING_POTION)
+        val thrown = world.projectiles.single()
+        steve.received()
+        steve.session.syncProjectiles()
+        val bottle = AddProjectile(thrown.id, "minecraft:lingering_potion", 1, thrown.position, thrown.velocity, thrown.pitch, thrown.yaw, setOf(ActorFlag.LINGERING), bottle = SWIFTNESS)
+        assertTrue(steve.received().any { it.contentEquals(bottle.encode(GameVersion.OLDEST)) }, "shown as a lingering potion of swiftness")
         repeat(5) { clients.map { it.session }.flyProjectiles(game) }
         val cloud = world.clouds.single()
         steve.session.syncClouds()

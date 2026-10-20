@@ -3491,12 +3491,13 @@ class Session(
         if (packets.isNotEmpty()) send(*packets.toTypedArray())
     }
 
-    /** The flags of [projectile]'s own: an arrow's sparks, while it flies, and its fire, and a trident's shine, and flying back. */
+    /** The flags of [projectile]'s own: an arrow's sparks, while it flies, and its fire, a trident's shine, and flying back, and a lingering potion's look. */
     private fun flagsOf(projectile: Projectile) = setOfNotNull(
         ActorFlag.CRITICAL.takeIf { projectile.arrow?.critical == true && projectile.stuckIn == null },
         ActorFlag.ON_FIRE.takeIf { projectile.arrow?.burns == true },
         ActorFlag.ENCHANTED.takeIf { projectile.item?.enchantments?.isNotEmpty() == true },
         ActorFlag.RETURN_TRIDENT.takeIf { projectile.returning },
+        ActorFlag.LINGERING.takeIf { projectile.kind == ProjectileKind.LINGERING_POTION },
     )
 
     /** Where the player can be hit, as tall as they are now. */

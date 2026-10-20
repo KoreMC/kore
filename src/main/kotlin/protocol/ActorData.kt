@@ -62,6 +62,8 @@ enum class ActorFlag(val bit: Int) {
     GLIDING(32),
     /** Without this, the client counts the player's air down as though they were underwater. */
     BREATHING(35),
+    /** A thrown potion that's lingering, which the client draws as one. */
+    LINGERING(47),
     HAS_COLLISION(48),
     /** Without this, the player floats rather than falls. */
     HAS_GRAVITY(49),

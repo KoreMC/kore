@@ -54,11 +54,13 @@ private val BlockState.isCandle get() = name.endsWith("candle") || name.endsWith
  * on its [face]: a campfire or candle that's out lights, unless it's in
  * water, and otherwise fire starts in the space against that face, if it's
  * empty and fire can burn there, or a nether portal opens there, inside an
- * empty frame. Flint and steel wears, and a fire charge is used up. Null
- * if nothing caught.
+ * empty frame. A campfire that's lit takes the use, and nothing catches
+ * against it, as in Bedrock, though fire could burn beside it. Flint and
+ * steel wears, and a fire charge is used up. Null if nothing caught.
  */
 fun FlatWorld.ignite(pos: BlockPos, face: Face, held: ItemStack, random: Random = Random.Default): ItemUsedOn? {
     val clicked = stateAt(pos) ?: return null
+    if (clicked.isCampfire && clicked.properties[CAMPFIRE_OUT] == bit(false)) return null
     val lit = when {
         isWet(pos) -> null
         clicked.isCampfire && clicked.properties[CAMPFIRE_OUT] == bit(true) -> blocks.find(clicked.name, clicked.properties + (CAMPFIRE_OUT to bit(false)))

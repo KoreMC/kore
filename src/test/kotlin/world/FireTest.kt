@@ -3,6 +3,7 @@ package org.koremc.world
 import org.koremc.protocol.Difficulty
 import org.koremc.registry.AIR
 import org.koremc.registry.BlockState
+import org.koremc.registry.ItemStack
 import org.koremc.registry.ItemStacks
 import org.koremc.registry.VanillaData
 import org.koremc.registry.assumeGameData
@@ -100,6 +101,16 @@ class FireTest {
         assertEquals(0.toByte(), world.stateAt(above.side(Face.NORTH))?.properties?.get("lit"))
         assertEquals(FIRE, nameAt(far))
         assertNull(world.douse(above), "nothing's left burning")
+    }
+
+    @Test
+    fun `flint and steel on a campfire that's lit does nothing, on top or at the side`() {
+        world[above] = block("minecraft:campfire", "extinguished" to 0.toByte())
+
+        assertNull(world.ignite(above, Face.UP, ItemStack(flintAndSteel.item)))
+        assertNull(world.ignite(above, Face.NORTH, ItemStack(flintAndSteel.item)))
+        assertEquals(AIR, nameAt(above.side(Face.UP)))
+        assertEquals(AIR, nameAt(above.side(Face.NORTH)))
     }
 
     @Test
