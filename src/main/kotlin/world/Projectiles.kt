@@ -83,6 +83,11 @@ private const val WIND_CHARGE_DAMAGE = 1f
 private const val WIND_CHARGE_CEILING = 30
 private const val WIND_CHARGE_LIFETIME = 60 * 20
 
+/** How fast a thrown potion leaves the hand, in blocks a tick, how far above the way its thrower looks, in degrees, and how much faster it falls each tick. */
+private const val POTION_SPEED = 0.5f
+private const val POTION_TILT = -20f
+private const val POTION_GRAVITY = 0.05
+
 /** How long a projectile that can be turned back can't be again, once thrown or turned back, in ticks: half a second. */
 private const val DEFLECT_IMMUNITY = 10
 
@@ -116,6 +121,8 @@ enum class ProjectileKind(
     val height: Float = PROJECTILE_SIZE,
     val impact: Float = 0f,
     val deflects: Boolean = false,
+    val speed: Float = THROW_SPEED,
+    val tilt: Float = 0f,
 ) {
     SNOWBALL("minecraft:snowball", "minecraft:snowball", "Snowball", drop = EYE_DROP),
     EGG("minecraft:egg", EGG_ENTITY, "Egg", climate = 0),
@@ -130,10 +137,15 @@ enum class ProjectileKind(
         "minecraft:wind_charge", "minecraft:wind_charge_projectile", "Wind Charge", gravity = 0.0, drag = 0.0, cooldown = ItemCooldown("wind_charge", WIND_CHARGE_COOLDOWN),
         width = WIND_CHARGE_SIZE, height = WIND_CHARGE_SIZE, impact = WIND_CHARGE_DAMAGE, deflects = true,
     ),
+    SPLASH_POTION("minecraft:splash_potion", "minecraft:splash_potion", "Potion", POTION_GRAVITY, drop = EYE_DROP, speed = POTION_SPEED, tilt = POTION_TILT),
+    LINGERING_POTION("minecraft:lingering_potion", "minecraft:lingering_potion", "Lingering Potion", POTION_GRAVITY, drop = EYE_DROP, speed = POTION_SPEED, tilt = POTION_TILT),
     ;
 
     /** Whether it's an egg, of any colour. */
     val egg get() = entity == EGG_ENTITY
+
+    /** Whether it's a thrown potion, which carries the potion it is as its [Projectile.item]. */
+    val thrownPotion get() = this == SPLASH_POTION || this == LINGERING_POTION
 
     companion object {
         /** What [item] is thrown as, or null for an item that isn't thrown. */
@@ -180,6 +192,9 @@ class Projectile(
 ) {
     /** A trident's Loyalty, which brings it back to whoever threw it. */
     val loyalty = item?.levelOf(LOYALTY) ?: 0
+
+    /** The potion a thrown potion is, by its number. */
+    val potion: Int? = item?.aux?.takeIf { kind.thrownPotion }
 
     /** Whoever threw it, or last turned it back. */
     var thrower = thrower
@@ -341,6 +356,22 @@ sealed interface ProjectileHit {
 
     /** It burst in the open air, as a wind charge flown too high does. */
     data class Air(override val projectile: Projectile, override val at: Vec3) : ProjectileHit
+}
+
+/**
+ * The way something leaves the hand of someone looking as [yaw] and
+ * [pitch] say, tipped [tilt] degrees up and down, a block long, as the game
+ * aims a throw: the tilt only lifts it, rather than turning the whole way.
+ */
+fun throwVector(yaw: Float, pitch: Float, tilt: Float): Vec3 {
+    if (tilt == 0f) return lookVector(yaw, pitch)
+    val turn = Math.toRadians(yaw.toDouble())
+    val tip = Math.toRadians(pitch.toDouble())
+    val x = -sin(turn) * cos(tip)
+    val y = -sin(Math.toRadians((pitch + tilt).toDouble()))
+    val z = cos(turn) * cos(tip)
+    val length = sqrt(x * x + y * y + z * z)
+    return Vec3((x / length).toFloat(), (y / length).toFloat(), (z / length).toFloat())
 }
 
 /** The way someone looking as [yaw] and [pitch] say looks, a block long. */

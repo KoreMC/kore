@@ -86,6 +86,23 @@ class FireTest {
     }
 
     @Test
+    fun `a splash of water douses fire, campfires and candles where it lands and on each side, but no further`() {
+        world[above] = block(FIRE)
+        world[above.side(Face.EAST)] = block("minecraft:campfire", "extinguished" to 0.toByte())
+        world[above.side(Face.NORTH)] = block("minecraft:candle", "lit" to 1.toByte())
+        val far = above.side(Face.EAST).side(Face.EAST)
+        world[far] = block(FIRE)
+
+        val doused = assertNotNull(world.douse(above))
+        assertEquals(setOf(above, above.side(Face.EAST), above.side(Face.NORTH)), doused.reshaped.toSet())
+        assertEquals(AIR, nameAt(above))
+        assertEquals(1.toByte(), world.stateAt(above.side(Face.EAST))?.properties?.get("extinguished"))
+        assertEquals(0.toByte(), world.stateAt(above.side(Face.NORTH))?.properties?.get("lit"))
+        assertEquals(FIRE, nameAt(far))
+        assertNull(world.douse(above), "nothing's left burning")
+    }
+
+    @Test
     fun `hitting fire puts it out, with its sound`() {
         world.ignite(ground, Face.UP, flintAndSteel)
         val out = world.putOutFire(ground, Face.UP)

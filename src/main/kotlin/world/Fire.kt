@@ -30,6 +30,7 @@ private const val LIGHTNING_FIRES = 4
 
 private const val IGNITE = "ignite"
 private const val EXTINGUISH = "extinguish.fire"
+private const val EXTINGUISH_CANDLE = "extinguish.candle"
 
 /** The sound of a fire charge used, which the game plays as a blaze's fireball. */
 private const val BLAZE_FIREBALL = 1009
@@ -91,6 +92,29 @@ fun FlatWorld.putOutFire(pos: BlockPos, face: Face): Changes? {
     if (stateAt(at)?.isFire != true) return null
     set(at, blocks.stateOf(AIR))
     return Changes(emptyMap(), listOf(at), listOf(BlockSound(at, EXTINGUISH, -1)))
+}
+
+/**
+ * Douses the fire at [pos] and at each side of it, as a splash of water
+ * does: fire goes out, and lit campfires and candles, each with its sound.
+ * Returns what changed, or null if nothing was burning.
+ */
+fun FlatWorld.douse(pos: BlockPos): Changes? {
+    val changed = mutableListOf<BlockPos>()
+    val sounds = mutableListOf<BlockSound>()
+    for (at in listOf(pos) + listOf(Face.NORTH, Face.SOUTH, Face.WEST, Face.EAST).map(pos::side)) {
+        val state = stateAt(at) ?: continue
+        val (out, sound) = when {
+            state.isFire -> blocks.stateOf(AIR) to EXTINGUISH
+            state.isCampfire && state.properties[CAMPFIRE_OUT] == bit(false) -> blocks.find(state.name, state.properties + (CAMPFIRE_OUT to bit(true))) to EXTINGUISH
+            state.isCandle && state.properties[LIT] == bit(true) -> blocks.find(state.name, state.properties + (LIT to bit(false))) to EXTINGUISH_CANDLE
+            else -> continue
+        }
+        set(at, out ?: continue)
+        changed += at
+        sounds += BlockSound(at, sound, -1)
+    }
+    return Changes(emptyMap(), changed, sounds).takeIf { changed.isNotEmpty() }
 }
 
 /**

@@ -239,6 +239,9 @@ data class LevelEvent(val event: Int, val position: Vec3, val data: Int) : Serve
         /** The flash where an ender pearl lands. */
         const val PARTICLES_TELEPORT = 2013
 
+        /** A splash potion bursting, in its colour, which the data gives, as ARGB. */
+        const val PARTICLES_POTION_SPLASH = 2002
+
         /**
          * Particles of the old kinds, numbered as the game's particle types:
          * the bits of an item breaking, whose data is the item's network ID
@@ -325,6 +328,9 @@ data class LevelSoundEvent(
         /** Something thrown leaving its thrower's hand, which names them as a player, and an ender pearl taking its thrower away. */
         const val THROW = "throw"
         const val TELEPORT = "teleport"
+
+        /** Glass breaking, as a thrown potion does. */
+        const val GLASS = "glass"
 
         /** A bow loosing an arrow, and an arrow hitting something. */
         const val BOW = "bow"

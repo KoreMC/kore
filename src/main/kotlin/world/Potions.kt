@@ -64,6 +64,39 @@ private val POTION_EFFECTS: Map<Int, List<PotionEffect>> = mapOf(
 /** The effects drinking the potion numbered [id] gives, or none for one that gives nothing, or one the game doesn't have. */
 fun potionEffects(id: Int): List<PotionEffect> = POTION_EFFECTS[id].orEmpty()
 
+/** The water bottle, and the last of the potions with no effect of their own: mundane, thick and awkward. */
+const val WATER_POTION = 0
+private const val LAST_PLAIN_POTION = 4
+
+/** Whether the potion numbered [id] is one with no effect of its own, like water or an awkward potion, which only puts out the fire on whoever it splashes. */
+fun isPlainPotion(id: Int) = id in WATER_POTION..LAST_PLAIN_POTION
+
+/** The colour of each effect a potion gives, as RGB, as the game has them. */
+private val EFFECT_COLOURS = mapOf(
+    Effect.SPEED to 0x33EBFF, Effect.SLOWNESS to 0x8BAFE0, Effect.STRENGTH to 0xFFC700, Effect.INSTANT_HEALTH to 0xF82423,
+    Effect.INSTANT_DAMAGE to 0xA9656A, Effect.JUMP_BOOST to 0xFDFF84, Effect.REGENERATION to 0xCD5CAB, Effect.RESISTANCE to 0x9146F0,
+    Effect.FIRE_RESISTANCE to 0xFF9900, Effect.WATER_BREATHING to 0x98DAC0, Effect.INVISIBILITY to 0xF6F6F6, Effect.NIGHT_VISION to 0xC2FF66,
+    Effect.WEAKNESS to 0x484D48, Effect.POISON to 0x87A363, Effect.WITHER to 0x736156, Effect.SLOW_FALLING to 0xF3CFB9,
+    Effect.WIND_CHARGED to 0xBDC9FF, Effect.WEAVING to 0x78695A, Effect.OOZING to 0x99FFA3, Effect.INFESTED to 0x8C9B8C,
+)
+
+/** The colour of water, which a potion of no effects is. */
+private const val WATER_COLOUR = 0x385DC6
+
+/**
+ * The colour of the potion numbered [id], as ARGB, as a splash of it and
+ * the cloud it leaves show: its effects' colours mixed, the stronger each,
+ * the more of it, or water's, for a potion of none.
+ */
+fun potionColour(id: Int): Int {
+    val effects = potionEffects(id).ifEmpty { return OPAQUE or WATER_COLOUR }
+    val weight = effects.sumOf { it.level.amplifier + 1 }
+    fun mixed(shift: Int) = effects.sumOf { ((EFFECT_COLOURS[it.level.effect] ?: WATER_COLOUR) shr shift and 0xFF) * (it.level.amplifier + 1) } / weight
+    return OPAQUE or (mixed(16) shl 16) or (mixed(8) shl 8) or mixed(0)
+}
+
+private const val OPAQUE = 0xFF shl 24
+
 /** How long an ominous bottle's Bad Omen lasts: 100 minutes. */
 const val OMINOUS_TICKS = 100 * 60 * 20
 

@@ -84,8 +84,9 @@ class KoreSettingsTest {
                     // Off, a hit does nothing. The pvp game rule turns it off too, for a while.
                     "combat": true,
 
-                    // Throwing and shooting: snowballs, eggs, ender pearls, wind charges, bows, crossbows and tridents, which fly and hit
-                    // players, an ender pearl taking its thrower where it lands, and a wind charge bursting. Off, they're only items.
+                    // Throwing and shooting: snowballs, eggs, ender pearls, wind charges, splash and lingering potions, bows, crossbows and
+                    // tridents, which fly and hit players, an ender pearl taking its thrower where it lands, and a wind charge or potion bursting.
+                    // Off, they're only items.
                     "projectiles": true
                 },
 

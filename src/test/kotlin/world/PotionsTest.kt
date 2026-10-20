@@ -33,6 +33,18 @@ class PotionsTest {
     }
 
     @Test
+    fun `a potion's colour is its effects' mixed, the stronger each the more of it, or water's for one of none`() {
+        assertEquals(0xFF385DC6.toInt(), potionColour(WATER_POTION))
+        assertEquals(0xFF33EBFF.toInt(), potionColour(14)) // Swiftness
+        assertEquals(0xFF33EBFF.toInt(), potionColour(16)) // Swiftness II, of one effect all the same
+        // The turtle master's Slowness IV and Resistance III, four parts to three.
+        val r = (0x8B * 4 + 0x91 * 3) / 7
+        val g = (0xAF * 4 + 0x46 * 3) / 7
+        val b = (0xE0 * 4 + 0xF0 * 3) / 7
+        assertEquals((0xFF shl 24) or (r shl 16) or (g shl 8) or b, potionColour(37))
+    }
+
+    @Test
     fun `a potion the game doesn't have gives nothing`() {
         assertTrue(potionEffects(47).isEmpty())
         assertTrue(potionEffects(-1).isEmpty())

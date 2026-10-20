@@ -9,6 +9,7 @@ import org.koremc.auth.MultiplayerTokenVerifier
 import org.koremc.auth.TestAuthority
 import org.koremc.auth.ecKeyPair
 import org.koremc.protocol.ActorDataId
+import org.koremc.protocol.AddEffectCloud
 import org.koremc.protocol.ActorEvent
 import org.koremc.protocol.ARMOUR_WINDOW
 import org.koremc.protocol.ActorFlag
@@ -18,9 +19,11 @@ import org.koremc.protocol.DeathInfo
 import org.koremc.protocol.Disconnect
 import org.koremc.protocol.FloatItem
 import org.koremc.protocol.GameMode
+import org.koremc.protocol.GameVersion
 import org.koremc.protocol.InventoryContent
 import org.koremc.protocol.InventorySlot
 import org.koremc.protocol.LevelSoundEvent
+import org.koremc.protocol.MobEffect
 import org.koremc.protocol.MovePlayer
 import org.koremc.protocol.OFFHAND_WINDOW
 import org.koremc.protocol.RemoveActor
@@ -38,6 +41,7 @@ import org.koremc.protocol.flagsItem
 import org.koremc.protocol.secondFlagsItem
 import org.koremc.protocol.loginPacket
 import org.koremc.protocol.readString
+import org.koremc.protocol.readVarInt
 import org.koremc.protocol.readVarUInt
 import org.koremc.protocol.readVarULong
 import org.koremc.protocol.readVec3
@@ -71,6 +75,7 @@ import org.koremc.world.ArrowShot
 import org.koremc.world.BlockPos
 import org.koremc.world.DamageCause
 import org.koremc.world.Drops
+import org.koremc.world.Effect
 import org.koremc.world.Features
 import org.koremc.world.FlatWorld
 import org.koremc.world.PLAYER_EYE_HEIGHT
@@ -83,6 +88,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private const val PROTOCOL = 2193
@@ -94,6 +100,8 @@ private const val PLAYER_LIST = 63
 private const val MOB_EQUIPMENT = 31
 private const val MOB_ARMOR_EQUIPMENT = 32
 private const val SET_ACTOR_MOTION = 40
+private const val MOB_EFFECT = 28
+private const val SWIFTNESS = 14
 
 /** The input flag set on every tick a player sneaks. */
 private const val SNEAKING = 8
@@ -113,6 +121,8 @@ private const val ARROW = 10
 private const val CROSSBOW = 11
 private const val TRIDENT = 12
 private const val WIND_CHARGE = 13
+private const val SPLASH_POTION = 14
+private const val LINGERING_POTION = 15
 
 /** The input flag set on the tick a player lands. */
 private const val VERTICAL_COLLISION = 50
@@ -139,12 +149,14 @@ class PlayersTest {
     private val crossbow = ItemDefinition("minecraft:crossbow", CROSSBOW, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 466)
     private val trident = ItemDefinition("minecraft:trident", TRIDENT, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 251)
     private val windCharge = ItemDefinition("minecraft:wind_charge", WIND_CHARGE, componentBased = false, ItemVersion.NONE)
+    private val splashPotion = ItemDefinition("minecraft:splash_potion", SPLASH_POTION, componentBased = false, ItemVersion.NONE, maxStackSize = 1)
+    private val lingeringPotion = ItemDefinition("minecraft:lingering_potion", LINGERING_POTION, componentBased = false, ItemVersion.NONE, maxStackSize = 1)
 
     /** What every player had when they last left, or null for players new to the world. */
     private var saved: NbtMap? = null
     private val game = GameData(
         world, emptyList(), org.koremc.protocol.BlockDefinitions(emptyList()), creative, emptyMap(), Drops(emptyList(), creative, palette),
-        items = ItemStacks(listOf(helmet, chestplate, shield, sword, axe, mace, snowball, enderPearl, bow, arrow, crossbow, trident, windCharge), creative, palette),
+        items = ItemStacks(listOf(helmet, chestplate, shield, sword, axe, mace, snowball, enderPearl, bow, arrow, crossbow, trident, windCharge, splashPotion, lingeringPotion), creative, palette),
         players = object : PlayerSaves {
             override fun load(player: UUID) = saved
 
@@ -597,6 +609,70 @@ class PlayersTest {
         assertEquals(19f, steve.session.vitals.health)
         assertEquals(20f, alex.session.vitals.health)
     }
+
+    @Test
+    fun `a splash potion bursts on whoever it hits, giving them all of its effects, and those near less, the further off`() {
+        val steve = Client(1, "Steve", "1111")
+        val alex = Client(2, "Alex", "2222")
+        alex.moves(Vec3(2.5f, -61.38f, 0.5f))
+        tick()
+        steve.session.give(ItemStack(splashPotion, aux = SWIFTNESS))
+        steve.received()
+        alex.received()
+
+        // Steve, at the spawn, throws east, at Alex, two blocks off.
+        steve.moves(Vec3(0.5f, -61.38f, 0.5f), yaw = -90f)
+        steve.throws(SPLASH_POTION)
+        assertNull(steve.session.heldStack)
+        val thrown = world.projectiles.single()
+        repeat(5) { clients.map { it.session }.flyProjectiles(game) }
+
+        assertTrue(thrown !in world.projectiles)
+        val toAlex = alex.received()
+        assertTrue(toAlex.any { it.contentEquals(LevelSoundEvent(LevelSoundEvent.GLASS, thrown.position, -1).encode()) })
+        assertEquals(mapOf(Effect.SPEED to 3600), effectsGiven(toAlex, 2), "all of it, on whoever it hit")
+        val steveGot = effectsGiven(steve.received(), 1).getValue(Effect.SPEED)
+        assertTrue(steveGot in 1000..2500, "a couple of blocks off, about half: $steveGot")
+    }
+
+    @Test
+    fun `a lingering potion splashes nobody, but leaves a cloud that gives a quarter of it to whoever's in it`() {
+        val steve = Client(1, "Steve", "1111")
+        steve.session.give(ItemStack(lingeringPotion, aux = SWIFTNESS))
+        // Straight down, at Steve's feet.
+        steve.moves(Vec3(0.5f, -61.38f, 0.5f), pitch = 90f)
+        steve.throws(LINGERING_POTION)
+        repeat(5) { clients.map { it.session }.flyProjectiles(game) }
+        val cloud = world.clouds.single()
+        steve.session.syncClouds()
+        val shown = steve.received()
+        assertTrue(effectsGiven(shown, 1).isEmpty(), "no splash")
+        assertTrue(shown.any { it.contentEquals(AddEffectCloud(cloud.id, cloud.position, 3f, 0xFF33EBFF.toInt()).encode(GameVersion.OLDEST)) })
+
+        repeat(10) { clients.map { it.session }.tickClouds(game) }
+        assertEquals(mapOf(Effect.SPEED to 900), effectsGiven(steve.received(), 1))
+    }
+
+    @Test
+    fun `a splash of water puts out whoever's burning near where it lands`() {
+        val steve = Client(1, "Steve", "1111")
+        steve.session.give(ItemStack(splashPotion, aux = 0))
+        steve.session.vitals.fireTicks = 100
+        steve.moves(Vec3(0.5f, -61.38f, 0.5f), pitch = 90f)
+        steve.throws(SPLASH_POTION)
+        repeat(5) { clients.map { it.session }.flyProjectiles(game) }
+        assertEquals(0, steve.session.vitals.fireTicks)
+    }
+
+    /** The effects [packets] give the entity [entityId], by number, and for how long. */
+    private fun effectsGiven(packets: List<ByteArray>, entityId: Long) = packets.mapNotNull { packet ->
+        val buffer = Unpooled.wrappedBuffer(packet)
+        if (buffer.readVarUInt() != MOB_EFFECT || buffer.readVarULong() != entityId || buffer.readByte().toInt() != MobEffect.ADD) return@mapNotNull null
+        val effect = buffer.readVarInt()
+        buffer.readVarInt() // Amplifier
+        buffer.readBoolean() // Particles
+        effect to buffer.readVarInt()
+    }.toMap()
 
     /** The motions [packets] set on the entity [entityId]. */
     private fun motionsOf(packets: List<ByteArray>, entityId: Long) = packets.mapNotNull { packet ->

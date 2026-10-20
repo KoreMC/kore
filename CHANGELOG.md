@@ -20,6 +20,9 @@ Each release, newest first, with the client version it's for. What's done since 
   whoever they hit
 - Wind charges are thrown, and burst where they hit, blowing away the players and items near, sparing a launched player's fall,
   and flipping the doors, trapdoors, fence gates, buttons and levers they reach, and putting out candles. A hit turns one back
+- Splash potions are thrown, and burst, giving everyone within four blocks their effects, the less the further off, and all of
+  them on whoever they hit. Lingering potions leave a cloud that gives a quarter of them to whoever's in it, shrinking as it
+  does. Water puts out burning players, and the fire, campfires and candles where it lands
 - The mace smashes, struck from a fall of a block and a half or more: harder for every block, with Density, and the fall then
   does its wielder no harm. Breach gets past armour, and Wind Burst launches the wielder back up
 - The console no longer shows players dying or respawning, only what they say and the commands they run

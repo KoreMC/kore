@@ -110,6 +110,42 @@ data class AddFallingBlock(val entityId: Long, val block: Int, val position: Vec
     }
 }
 
+/**
+ * An area effect cloud, as a lingering potion leaves, the entity
+ * [entityId], lying at [position], spreading [radius] blocks across, its
+ * particles in [colour], ARGB. Kore shrinks it, so the client is told it
+ * lasts for ever and barely shrinks, and hears of its radius as it changes.
+ */
+data class AddEffectCloud(val entityId: Long, val position: Vec3, val radius: Float, val colour: Int) : VersionedPacket {
+    override val id get() = ADD_ACTOR
+
+    override fun encodeBody(out: ByteBuf, version: GameVersion) {
+        out.writeVarLong(entityId)
+        out.writeVarULong(entityId)
+        out.writeString(AREA_EFFECT_CLOUD)
+        out.writeVec3(position)
+        out.writeVec3(Vec3(0f, 0f, 0f))
+        out.writeFloatLE(0f).writeFloatLE(0f) // Pitch and yaw
+        out.writeFloatLE(0f) // Head yaw
+        out.writeFloatLE(0f) // Body yaw
+        out.writeVarUInt(0) // Attributes
+        out.writeActorData(
+            listOf(
+                flagsItem(emptySet()),
+                IntItem(ActorDataId.EFFECT_COLOR, colour),
+                ByteItem(ActorDataId.EFFECT_AMBIENCE, 0),
+                FloatItem(ActorDataId.CLOUD_RADIUS, radius),
+                IntItem(ActorDataId.CLOUD_DURATION, Int.MAX_VALUE),
+                FloatItem(ActorDataId.CLOUD_CHANGE_RATE, Float.MIN_VALUE),
+                FloatItem(ActorDataId.CLOUD_CHANGE_ON_PICKUP, Float.MIN_VALUE),
+            ),
+        )
+        out.writeVarUInt(0) // Int properties
+        out.writeVarUInt(0) // Float properties
+        out.writeRidesNothing(version)
+    }
+}
+
 /** A lightning bolt striking, as the entity [entityId], which the client draws and flashes from [position] up. */
 data class AddLightning(val entityId: Long, val position: Vec3) : VersionedPacket {
     override val id get() = ADD_ACTOR
@@ -143,9 +179,9 @@ internal fun ByteBuf.writeRidesNothing(version: GameVersion) {
  * [thrower], its bottom at [position], moving at [velocity] blocks a tick,
  * pointing the way [pitch] and [yaw] say, with [flags] of its own, like an
  * arrow's sparks, and [properties] of its entity set, by their place among
- * its properties, like an egg's climate variant, and for a tipped arrow,
- * the [potion] it's tipped with. It's a quarter of a block each way, as an
- * item is.
+ * its properties, like an egg's climate variant, for a tipped arrow, the
+ * [potion] it's tipped with, and for a thrown potion, the potion it is,
+ * [bottle]. It's a quarter of a block each way, as an item is.
  */
 data class AddProjectile(
     val entityId: Long,
@@ -158,6 +194,7 @@ data class AddProjectile(
     val flags: Set<ActorFlag> = emptySet(),
     val properties: List<Pair<Int, Int>> = emptyList(),
     val potion: Int? = null,
+    val bottle: Int? = null,
 ) : VersionedPacket {
     override val id get() = ADD_ACTOR
 
@@ -179,6 +216,7 @@ data class AddProjectile(
                 FloatItem(ActorDataId.HEIGHT, ITEM_SIZE),
                 potion?.let { ShortItem(ActorDataId.AUX_VALUE_DATA, it.toShort()) },
                 potion?.takeIf { it > LAST_PLAIN_POTION }?.let { ByteItem(ActorDataId.CUSTOM_DISPLAY, (it + 1).toByte()) },
+                bottle?.let { ShortItem(ActorDataId.AUX_VALUE_DATA, it.toShort()) },
             ),
         )
         out.writeVarUInt(properties.size)
@@ -216,6 +254,9 @@ private const val LAST_PLAIN_POTION = 4
 
 /** The game's name for lightning bolts, which the sound of their thunder names too. */
 const val LIGHTNING_BOLT = "minecraft:lightning_bolt"
+
+/** The game's name for the cloud a lingering potion leaves. */
+private const val AREA_EFFECT_CLOUD = "minecraft:area_effect_cloud"
 
 /** An entity gone from the client's world, by its unique ID. */
 data class RemoveActor(val entityId: Long) : ServerPacket {

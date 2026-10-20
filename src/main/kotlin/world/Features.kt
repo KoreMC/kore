@@ -53,9 +53,9 @@ data class Features(
     val combat: Boolean = true,
     /**
      * Throwing and shooting: snowballs, eggs, ender pearls, wind charges,
-     * bows, crossbows and tridents, which fly and hit players, an ender
-     * pearl taking whoever threw it where it lands, and a wind charge
-     * bursting. Off, they're only items.
+     * splash and lingering potions, bows, crossbows and tridents, which fly
+     * and hit players, an ender pearl taking whoever threw it where it
+     * lands, and a wind charge or potion bursting. Off, they're only items.
      */
     val projectiles: Boolean = true,
 ) {

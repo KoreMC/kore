@@ -109,6 +109,19 @@ class ProjectilesTest {
     }
 
     @Test
+    fun `a potion's thrown a little above the way its thrower looks, the tilt lifting it rather than turning it all`() {
+        val ahead = throwVector(yaw = -90f, pitch = 0f, tilt = -20f)
+        val lift = kotlin.math.sin(Math.toRadians(20.0))
+        val length = kotlin.math.sqrt(1 + lift * lift)
+        assertEquals((1 / length).toFloat(), ahead.x, 1e-6f)
+        assertEquals((lift / length).toFloat(), ahead.y, 1e-6f)
+        // Looking straight down, it goes straight down.
+        val down = throwVector(yaw = 0f, pitch = 90f, tilt = -20f)
+        assertEquals(-1f, down.y, 1e-6f)
+        assertEquals(lookVector(30f, 10f), throwVector(30f, 10f, tilt = 0f))
+    }
+
+    @Test
     fun `a wind charge flies straight on, neither slowing nor falling, until it bursts high enough above the world`() {
         val charge = world.spawnProjectile(ProjectileKind.WIND_CHARGE, thrower = 1, Vec3(0.5f, -50f, 0.5f), Vec3(1.5f, 0f, 0f))
         repeat(10) { world.tickProjectiles(emptyMap()) }

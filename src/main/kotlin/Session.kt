@@ -33,6 +33,7 @@ import org.koremc.protocol.Ability
 import org.koremc.protocol.ActorDataId
 import org.koremc.protocol.ActorEvent
 import org.koremc.protocol.ActorFlag
+import org.koremc.protocol.AddEffectCloud
 import org.koremc.protocol.AddExperienceOrb
 import org.koremc.protocol.AddFallingBlock
 import org.koremc.protocol.AddItemActor
@@ -325,6 +326,7 @@ import org.koremc.world.TRIDENT_DAMAGE
 import org.koremc.world.TRIDENT_SPEED
 import org.koremc.world.Vec3
 import org.koremc.world.Vitals
+import org.koremc.world.WATER_POTION
 import org.koremc.world.WELL_FED
 import org.koremc.world.WRITABLE_BOOK
 import org.koremc.world.WRITTEN_BOOK
@@ -355,6 +357,7 @@ import org.koremc.world.damageAfter
 import org.koremc.world.disablesShields
 import org.koremc.world.dispenserKind
 import org.koremc.world.drawMap
+import org.koremc.world.douse
 import org.koremc.world.dropExperience
 import org.koremc.world.dropFromBlock
 import org.koremc.world.emptyBucket
@@ -385,6 +388,7 @@ import org.koremc.world.isItemFrame
 import org.koremc.world.isJukebox
 import org.koremc.world.isLectern
 import org.koremc.world.isNoteBlock
+import org.koremc.world.isPlainPotion
 import org.koremc.world.isSign
 import org.koremc.world.isWet
 import org.koremc.world.knockBookOff
@@ -406,6 +410,7 @@ import org.koremc.world.pickedItem
 import org.koremc.world.pistonMotions
 import org.koremc.world.place
 import org.koremc.world.playNote
+import org.koremc.world.potionColour
 import org.koremc.world.potionEffects
 import org.koremc.world.powerDamage
 import org.koremc.world.pressPlates
@@ -437,7 +442,9 @@ import org.koremc.world.strike
 import org.koremc.world.surroundings
 import org.koremc.world.takeFromFrame
 import org.koremc.world.thornsPrick
+import org.koremc.world.throwVector
 import org.koremc.world.tickBlocks
+import org.koremc.world.tickEffectClouds
 import org.koremc.world.tickItems
 import org.koremc.world.tickOrbs
 import org.koremc.world.tickProjectiles
@@ -2184,22 +2191,25 @@ class Session(
 
     /**
      * Throws one of what the player holds, as [kind], from their eyes the
-     * way they look, carrying the player's own movement with it, but up and
-     * down only while they're off the ground, as the game has it, so one
-     * thrown down as they fall outruns them. Nothing's thrown with
-     * projectiles switched off, or while they're still waiting to throw
-     * another of its kind, as after an ender pearl, which they then wait a
-     * moment to throw again. Everyone around hears it.
+     * way they look, a potion a little above it, as fast as its kind flies,
+     * carrying the player's own movement with it, but up and down only while
+     * they're off the ground, as the game has it, so one thrown down as they
+     * fall outruns them. Nothing's thrown with projectiles switched off, or
+     * while they're still waiting to throw another of its kind, as after an
+     * ender pearl, which they then wait a moment to throw again. Everyone
+     * around hears it.
      */
     private fun throwHeld(kind: ProjectileKind) {
         if (!world.features.projectiles) return
+        val held = heldStack ?: return
         val cooldown = kind.cooldown
         if (cooldown != null && (cooldowns[cooldown.category] ?: 0) > aliveTicks) return
-        val look = lookVector(yaw, pitch)
+        val way = throwVector(yaw, pitch, kind.tilt)
         val from = eyes()
         val falling = if (onGround) 0f else delta.y
         world.spawnProjectile(
-            kind, entityId, Vec3(from.x, from.y - kind.drop, from.z), Vec3(look.x * THROW_SPEED + delta.x, look.y * THROW_SPEED + falling, look.z * THROW_SPEED + delta.z),
+            kind, entityId, Vec3(from.x, from.y - kind.drop, from.z),
+            Vec3(way.x * kind.speed + delta.x, way.y * kind.speed + falling, way.z * kind.speed + delta.z), item = held.copy(count = 1).takeIf { kind.thrownPotion },
         )
         if (cooldown != null) {
             cooldowns[cooldown.category] = aliveTicks + cooldown.ticks
@@ -2604,16 +2614,66 @@ class Session(
         effectStarted(given)
     }
 
-    /** Heals or hurts the player at once, for Instant Health or Instant Damage, [given]. Returns whether it was one of them. */
-    private fun tookInstantly(given: EffectLevel): Boolean {
+    /**
+     * Heals or hurts the player at once, for Instant Health or Instant
+     * Damage, [given], [share] as strongly as drinking it, rounded to the
+     * nearest point, as a splash further off is, the hurt by [by], if they
+     * threw it. Returns whether it was one of them.
+     */
+    private fun tookInstantly(given: EffectLevel, share: Double = 1.0, by: Session? = null): Boolean {
         // Doubling a level at a time, as far as a number goes.
         val strength = 1 shl minOf(given.amplifier, MAX_DOUBLINGS)
+        fun shared(amount: Float) = floor(share * amount * strength + 0.5).toFloat()
         when (given.effect) {
-            Effect.INSTANT_HEALTH -> heal(INSTANT_HEALTH * strength)
-            Effect.INSTANT_DAMAGE -> hurt(INSTANT_DAMAGE * strength, DamageCause.MAGIC)
+            Effect.INSTANT_HEALTH -> shared(INSTANT_HEALTH).takeIf { it > 0 }?.let(::heal)
+            Effect.INSTANT_DAMAGE -> shared(INSTANT_DAMAGE).takeIf { it > 0 }?.let { hurt(it, DamageCause.MAGIC, by = by) }
             else -> return false
         }
         return true
+    }
+
+    /**
+     * The player splashed by the potion numbered [potion], thrown by
+     * [thrower], [share] of the way in from four blocks off to where it
+     * burst, or right on them: each effect of it lasts that share of as long
+     * as drinking it would, if that's longer than a second, and an instant
+     * one is that share as strong. Another player's Instant Damage does
+     * nothing while the pvp rule says no. A potion of no effects, like water,
+     * puts out their fire.
+     */
+    internal fun splashedBy(potion: Int, share: Double, thrower: Session?) {
+        if (isPlainPotion(potion)) return extinguish()
+        val harmless = thrower != null && thrower !== this && !world.rules.pvp
+        for (effect in potionEffects(potion)) {
+            if (effect.level.effect == Effect.INSTANT_DAMAGE && harmless) continue
+            if (tookInstantly(effect.level, share, thrower)) continue
+            val ticks = (share * effect.ticks + 0.5).toInt()
+            if (ticks > SPLASH_LEAST_TICKS) giveEffect(effect.level, ticks, ambient = false)
+        }
+    }
+
+    /**
+     * The player reached by a cloud of the potion numbered [potion], left by
+     * [owner]: each effect of it lasts a quarter as long as drinking it
+     * would, and an instant one is half as strong. Another player's Instant
+     * Damage does nothing while the pvp rule says no. A cloud of a potion of
+     * no effects, like water, puts out their fire.
+     */
+    internal fun cloudedBy(potion: Int, owner: Session?) {
+        if (isPlainPotion(potion)) return extinguish()
+        val harmless = owner != null && owner !== this && !world.rules.pvp
+        for (effect in potionEffects(potion)) {
+            if (effect.level.effect == Effect.INSTANT_DAMAGE && harmless) continue
+            if (tookInstantly(effect.level, CLOUD_INSTANT_SHARE, owner)) continue
+            giveEffect(effect.level, maxOf(1, effect.ticks / CLOUD_SHARE), ambient = false)
+        }
+    }
+
+    /** Puts out the player's fire, if they're burning, which they and everyone who sees them see. */
+    private fun extinguish() {
+        if (vitals.fireTicks <= 0) return
+        vitals.fireTicks = 0
+        send(SetActorData(entityId, listOf(flagsItem(playerFlags()))))
     }
 
     /** Takes [effect] from the player, or every effect, for null. Returns whether they had any to take. */
@@ -3373,8 +3433,30 @@ class Session(
         if (packets.isNotEmpty()) send(*packets.toTypedArray())
     }
 
-    /** The projectiles the client has been shown. */
+    /** The projectiles the client has been shown, and the clouds lingering potions left. */
     private val shownProjectiles = HashSet<Long>()
+    private val shownClouds = HashSet<Long>()
+
+    /**
+     * Shows the client the clouds lingering potions left in the chunks it
+     * has: they appear, in their potion's colour, shrink as they do, and go.
+     * Run once a tick.
+     */
+    fun syncClouds() {
+        if (state != State.IN_GAME) return
+        val inView = world.clouds.filter { it.position.toBlockPos().chunk in sentChunks }
+        val ids = inView.mapTo(HashSet()) { it.id }
+        val packets = shownClouds.filter { it !in ids }.map(::RemoveActor).toMutableList<ServerPacket>()
+        for (cloud in inView) {
+            when {
+                cloud.id !in shownClouds -> packets += AddEffectCloud(cloud.id, cloud.position, cloud.radius, potionColour(cloud.potion))
+                cloud.reshaped -> packets += SetActorData(cloud.id, listOf(FloatItem(ActorDataId.CLOUD_RADIUS, cloud.radius)))
+            }
+        }
+        shownClouds.retainAll(ids)
+        shownClouds += ids
+        if (packets.isNotEmpty()) send(*packets.toTypedArray())
+    }
 
     /**
      * Shows the client what's been thrown and is flying in the chunks it
@@ -3392,7 +3474,7 @@ class Session(
                 val properties = listOfNotNull(projectile.kind.climate?.let { 0 to it })
                 packets += AddProjectile(
                     projectile.id, projectile.kind.entity, projectile.thrower, projectile.position, projectile.velocity, projectile.pitch, projectile.yaw,
-                    flagsOf(projectile), properties, projectile.arrow?.potion,
+                    flagsOf(projectile), properties, projectile.arrow?.potion, projectile.potion,
                 )
                 continue
             }
@@ -5005,6 +5087,10 @@ internal fun Collection<Session>.flyProjectiles(game: GameData) {
             showAround(sounds.map { hit.at.toBlockPos() to it })
             continue
         }
+        if (projectile.kind.thrownPotion) {
+            splashPotion(hit, target, thrower, game)
+            continue
+        }
         target?.hitBy(projectile, thrower)
         if (projectile.kind == ProjectileKind.WIND_CHARGE) {
             windBurst(hit.at, game)
@@ -5012,6 +5098,45 @@ internal fun Collection<Session>.flyProjectiles(game: GameData) {
         }
         showAround(burst(projectile.kind, hit.at, game).map { hit.at.toBlockPos() to it })
         if (projectile.kind == ProjectileKind.ENDER_PEARL) thrower?.arriveByPearl(hit.at)
+    }
+}
+
+/**
+ * The thrown potion that made [hit] bursting, thrown by [thrower], for
+ * everyone around to see and hear, in its colour: a splash potion splashes
+ * everyone whose box comes within four blocks across and two up and down
+ * of it, and whose feet are within four blocks, the more of it the nearer,
+ * and all of it on [target], whom it hit. A lingering potion splashes
+ * nobody, but leaves a cloud of itself there. Water douses the fire where
+ * it hits a block, and on each side.
+ */
+private fun Collection<Session>.splashPotion(hit: ProjectileHit, target: Session?, thrower: Session?, game: GameData) {
+    val projectile = hit.projectile
+    val potion = projectile.potion ?: WATER_POTION
+    val at = hit.at
+    val here = at.toBlockPos()
+    showAround(listOf(here to LevelEvent(LevelEvent.PARTICLES_POTION_SPLASH, at, potionColour(potion)), here to LevelSoundEvent(LevelSoundEvent.GLASS, at, -1)))
+    if (potion == WATER_POTION && hit is ProjectileHit.Block) game.world.douse(here)?.let { showAround(game.world.packetsFor(it)) }
+    if (projectile.kind == ProjectileKind.LINGERING_POTION) {
+        game.world.spawnCloud(potion, at, projectile.thrower)
+        return
+    }
+    val reach = Box.around(at).grown(SPLASH_REACH_ACROSS, SPLASH_REACH_UP)
+    for (player in filter { it.isInGame && !it.dead && it.gameMode != GameMode.SPECTATOR }) {
+        val off = player.feet.distanceTo(at)
+        if (off >= SPLASH_REACH || !player.hitbox.overlaps(reach)) continue
+        player.splashedBy(potion, if (player === target) 1.0 else 1.0 - off / SPLASH_REACH, thrower)
+    }
+}
+
+/**
+ * Ticks the clouds lingering potions left, at the players in the game: each
+ * one a cloud reaches is reached by it. Run once a tick.
+ */
+internal fun Collection<Session>.tickClouds(game: GameData) {
+    val players = filter { it.isInGame && !it.dead && it.gameMode != GameMode.SPECTATOR }
+    for (touch in game.world.tickEffectClouds(players.associate { it.entityId to it.hitbox })) {
+        players.find { it.entityId == touch.entityId }?.cloudedBy(touch.cloud.potion, players.find { it.entityId == touch.cloud.owner })
     }
 }
 
@@ -5079,6 +5204,21 @@ private const val ARROW_PICKUP_UP = 0.5
  * beyond it.
  */
 private const val SPIN_REACH = 1.0
+
+/**
+ * How far a splash potion reaches: whoever's feet are within four blocks of
+ * where it burst, their box within four blocks across and two up and down.
+ */
+private const val SPLASH_REACH = 4.0
+private const val SPLASH_REACH_ACROSS = 4.0
+private const val SPLASH_REACH_UP = 2.0
+
+/** How long a splash must give an effect for, in ticks, more than a second, for it to give it at all. */
+private const val SPLASH_LEAST_TICKS = 20
+
+/** How much of drinking it a lingering potion's cloud gives each time it reaches someone: a quarter as long, and half as strong, for an instant effect. */
+private const val CLOUD_SHARE = 4
+private const val CLOUD_INSTANT_SHARE = 0.5
 
 /** How high an item's eyes are, which a burst pushes it toward, as the game has them. */
 private const val ITEM_EYE_HEIGHT = 0.2125f
@@ -5386,12 +5526,14 @@ class Sessions(
         sessions.values.tickBeacons(game)
         game.world.tickOrbs(sessions.values.mapNotNull { it.orbTarget })
         sessions.values.flyProjectiles(game)
+        sessions.values.tickClouds(game)
         sessions.values.forEach { it.collectItems() }
         sessions.values.forEach { it.collectProjectiles() }
         sessions.values.forEach { it.collectOrbs() }
         sessions.values.forEach { it.syncItems() }
         sessions.values.forEach { it.syncOrbs() }
         sessions.values.forEach { it.syncProjectiles() }
+        sessions.values.forEach { it.syncClouds() }
         sessions.values.forEach { it.syncWindow() }
         sessions.values.forEach { it.syncPlayers() }
         sessions.values.forEach { it.drawHeldMaps() }

@@ -14,9 +14,12 @@ enum class ActorDataId(val id: Int) {
     NAME(4),
     /** Whose an actor is, like whoever threw a projectile, by their entity ID. */
     OWNER(5),
+    /** The colour of the particles an area effect cloud gives off, as ARGB, and whether they're as faint as a beacon's, as a byte. */
+    EFFECT_COLOR(8),
+    EFFECT_AMBIENCE(9),
     /** What potion a tipped arrow shows it's tipped with, past the plain potions, as its number and 1, as a byte. */
     CUSTOM_DISPLAY(18),
-    /** What potion a tipped arrow's tipped with, by its number, as a short. */
+    /** What potion a tipped arrow's tipped with, or a thrown potion is, by its number, as a short. */
     AUX_VALUE_DATA(36),
     AIR_SUPPLY(7),
     /** How much experience an orb holds, which sets how big it looks. */
@@ -25,6 +28,15 @@ enum class ActorDataId(val id: Int) {
     AIR_SUPPLY_MAX(42),
     WIDTH(53),
     HEIGHT(54),
+    /**
+     * How far across an area effect cloud spreads, as a float, how long it
+     * lasts, as an int, and how much it shrinks a tick and as it's used, as
+     * floats, which the client would shrink it by itself.
+     */
+    CLOUD_RADIUS(61),
+    CLOUD_DURATION(95),
+    CLOUD_CHANGE_RATE(97),
+    CLOUD_CHANGE_ON_PICKUP(98),
     /** Whether the name shows even when the actor is hidden from view, as a byte. */
     ALWAYS_SHOW_NAME(81),
     /** The rest of the [ActorFlag]s, from bit 64 up. */

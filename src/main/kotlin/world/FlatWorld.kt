@@ -87,6 +87,7 @@ class FlatWorld(
     private val orbEntities = LinkedHashMap<Long, ExperienceOrb>()
     private val fallingEntities = LinkedHashMap<Long, FallingBlock>()
     private val projectileEntities = LinkedHashMap<Long, Projectile>()
+    private val cloudEntities = LinkedHashMap<Long, EffectCloud>()
     private var nextEntityId = 1L
 
     /** The items lying in the world, oldest first. */
@@ -100,6 +101,9 @@ class FlatWorld(
 
     /** What's been thrown and is still flying, oldest first. */
     val projectiles: Collection<Projectile> get() = projectileEntities.values
+
+    /** The clouds lingering potions left. */
+    val clouds: Collection<EffectCloud> get() = cloudEntities.values
 
     /**
      * Where blocks, or the water inside them, changed since the blocks
@@ -252,6 +256,13 @@ class FlatWorld(
 
     fun removeProjectile(id: Long) {
         projectileEntities.remove(id)
+    }
+
+    /** Leaves a cloud of the potion numbered [potion] at [position], thrown as a lingering potion by the entity [owner]. */
+    fun spawnCloud(potion: Int, position: Vec3, owner: Long): EffectCloud = EffectCloud(newEntityId(), potion, position, owner).also { cloudEntities[it.id] = it }
+
+    fun removeCloud(id: Long) {
+        cloudEntities.remove(id)
     }
 
     /** What's inside the block at [pos], in the second layer: the water in a fence, say, or null for nothing. */

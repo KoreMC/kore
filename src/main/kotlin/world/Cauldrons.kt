@@ -57,9 +57,6 @@ private val BUCKETS = mapOf(OF_WATER to WATER_BUCKET, OF_LAVA to LAVA_BUCKET, OF
 /** The bottles a potion comes in, as cauldrons number them. */
 private val POTION_BOTTLES = listOf("minecraft:potion", "minecraft:splash_potion", "minecraft:lingering_potion")
 
-/** The potion that's water. */
-private const val WATER_POTION = 0
-
 /** Items that take on the colour of dyed water, and lose it in plain water. */
 private val DYEABLE = setOf(
     "leather_helmet", "leather_chestplate", "leather_leggings", "leather_boots", "leather_horse_armor", "wolf_armor",
