@@ -435,6 +435,19 @@ class PlayersTest {
     }
 
     @Test
+    fun `a fall counts from the highest the player got, so going back up, as a Riptide launch does, starts it over`() {
+        val steve = Client(1, "Steve", "1111")
+        // Ten blocks down, launched four back up, then fourteen down to the ground.
+        steve.moves(Vec3(0.5f, -41.38f, 0.5f))
+        steve.moves(Vec3(0.5f, -51.38f, 0.5f))
+        steve.moves(Vec3(0.5f, -47.38f, 0.5f), delta = Vec3(0f, 1f, 0f))
+        steve.moves(Vec3(0.5f, -61.38f, 0.5f))
+        steve.moves(Vec3(0.5f, -61.38f, 0.5f), inputs = listOf(VERTICAL_COLLISION))
+
+        assertEquals(9f, steve.session.vitals.health, "hurt by the fourteen blocks, but the first three")
+    }
+
+    @Test
     fun `a mace's hit from a fall smashes, harder for the fall, which then does the wielder no harm, and Wind Burst launches them back up`() {
         val steve = Client(1, "Steve", "1111")
         val alex = Client(2, "Alex", "2222")

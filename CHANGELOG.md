@@ -26,6 +26,7 @@ Each release, newest first, with the client version it's for. What's done since 
 - Armour worn by a hurt, and items Mending repairs, show their new durability at once, not once they're moved
 - What `/clear` or a used-up totem takes from the offhand goes from it, rather than seeming to stay
 - Effects stay on a player who leaves and joins again, until they wear off, are cleared, or the player dies
+- A fall counts from the highest a player got, so going back up partway, launched or pushed, starts it over
 
 ## 0.1.0
 

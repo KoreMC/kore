@@ -1429,9 +1429,10 @@ class Session(
 
     /**
      * Counts how far the player falls, their feet having been at [fromY]:
-     * every block down while they're off the ground, as the game counts it,
-     * and none in water, on something they climb, or flying. Once they land,
-     * they land on what's under them, having fallen that far.
+     * every block down while they're off the ground, from the highest they
+     * got, so going back up, launched by Riptide or a mace's Wind Burst,
+     * starts it over, and none in water, on something they climb, or flying.
+     * Once they land, they land on what's under them, having fallen that far.
      */
     private fun fall(fromY: Float) {
         val at = feet.toBlockPos()
@@ -1442,6 +1443,7 @@ class Session(
                 fallDistance = 0f
             }
             feet.y < fromY -> fallDistance += fromY - feet.y
+            feet.y > fromY -> fallDistance = 0f
         }
     }
 
