@@ -2184,9 +2184,12 @@ class Session(
 
     /**
      * Throws one of what the player holds, as [kind], from their eyes the
-     * way they look, unless projectiles are switched off, or they're still
-     * waiting to throw another of its kind, as after an ender pearl, which
-     * they then wait a moment to throw again. Everyone around hears it.
+     * way they look, carrying the player's own movement with it, but up and
+     * down only while they're off the ground, as the game has it, so one
+     * thrown down as they fall outruns them. Nothing's thrown with
+     * projectiles switched off, or while they're still waiting to throw
+     * another of its kind, as after an ender pearl, which they then wait a
+     * moment to throw again. Everyone around hears it.
      */
     private fun throwHeld(kind: ProjectileKind) {
         if (!world.features.projectiles) return
@@ -2194,7 +2197,10 @@ class Session(
         if (cooldown != null && (cooldowns[cooldown.category] ?: 0) > aliveTicks) return
         val look = lookVector(yaw, pitch)
         val from = eyes()
-        world.spawnProjectile(kind, entityId, Vec3(from.x, from.y - kind.drop, from.z), Vec3(look.x * THROW_SPEED, look.y * THROW_SPEED, look.z * THROW_SPEED))
+        val falling = if (onGround) 0f else delta.y
+        world.spawnProjectile(
+            kind, entityId, Vec3(from.x, from.y - kind.drop, from.z), Vec3(look.x * THROW_SPEED + delta.x, look.y * THROW_SPEED + falling, look.z * THROW_SPEED + delta.z),
+        )
         if (cooldown != null) {
             cooldowns[cooldown.category] = aliveTicks + cooldown.ticks
             send(PlayerStartItemCooldown(cooldown.category, cooldown.ticks))

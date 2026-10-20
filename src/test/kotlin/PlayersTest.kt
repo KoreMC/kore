@@ -545,6 +545,37 @@ class PlayersTest {
     }
 
     @Test
+    fun `a wind charge thrown down while falling carries the fall with it, outruns its thrower, and spares them the fall`() {
+        val steve = Client(1, "Steve", "1111")
+        steve.session.give(ItemStack(windCharge))
+        // Falling a block and six tenths a tick, twenty blocks down, three blocks and seven tenths above the ground, throwing straight down.
+        steve.moves(Vec3(0.5f, -37.68f, 0.5f))
+        steve.moves(Vec3(0.5f, -57.68f, 0.5f), pitch = 90f, delta = Vec3(0f, -1.6f, 0f))
+        steve.throws(WIND_CHARGE)
+        val charge = world.projectiles.single()
+        assertEquals(-3.1f, charge.velocity.y, 1e-5f)
+
+        clients.map { it.session }.flyProjectiles(game)
+        steve.moves(Vec3(0.5f, -59.28f, 0.5f), pitch = 90f, delta = Vec3(0f, -1.65f, 0f))
+        clients.map { it.session }.flyProjectiles(game)
+        assertTrue(charge !in world.projectiles, "it burst on the ground first")
+        steve.moves(Vec3(0.5f, -61.38f, 0.5f), pitch = 90f, inputs = listOf(VERTICAL_COLLISION))
+        assertEquals(20f, steve.session.vitals.health)
+    }
+
+    @Test
+    fun `a snowball thrown on the ground carries the thrower's movement across, but not their weight`() {
+        val steve = Client(1, "Steve", "1111")
+        steve.session.give(ItemStack(snowball))
+        steve.moves(Vec3(0.5f, -61.38f, 0.5f), yaw = -90f, inputs = listOf(VERTICAL_COLLISION), delta = Vec3(0f, -0.0784f, 0.2f))
+        steve.throws(SNOWBALL)
+        val thrown = world.projectiles.single()
+        assertEquals(1.5f, thrown.velocity.x, 1e-5f)
+        assertEquals(0f, thrown.velocity.y, 1e-5f)
+        assertEquals(0.2f, thrown.velocity.z, 1e-5f)
+    }
+
+    @Test
     fun `a wind charge hit turns back the way the hitter looks, as theirs, and hurts whoever threw it`() {
         val steve = Client(1, "Steve", "1111")
         val alex = Client(2, "Alex", "2222")
