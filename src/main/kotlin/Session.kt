@@ -1074,9 +1074,9 @@ class Session(
     /** When the player raised the shield they hold up, in [aliveTicks], while they hold it up. */
     private var shieldRaisedAt: Int? = null
 
-    /** Whether the player's spinning, launched by Riptide, and where their feet were and how they were moving the tick before, which a spin ends on. */
+    /** Whether the player's spinning, launched by Riptide, and where their feet were the tick before, around which a spin ends on whoever's there. */
     private var spinning = false
-    private var heading: Pair<Vec3, Vec3>? = null
+    private var lastFeet: Vec3? = null
 
     /** The food and saturation the client last heard the player has. */
     private var shownHunger = MAX_FOOD to STARTING_SATURATION
@@ -1393,7 +1393,7 @@ class Session(
         // Until the client has moved its player where a teleport put them, it reports where they were.
         teleportedTo?.let { to ->
             if (InputFlag.HANDLED_TELEPORT !in packet.inputs && !reported.within(TELEPORT_SLACK, to)) {
-                heading = null
+                lastFeet = null
                 onInputs(packet)
                 return
             }
@@ -1401,7 +1401,7 @@ class Session(
         }
         val fellFrom = feet.y
         val from = position
-        heading = feet to delta
+        lastFeet = feet
         position = reported
         delta = packet.delta
         if (pistonWatch > 0) {
@@ -4041,7 +4041,7 @@ class Session(
         strike(target)
     }
 
-    /** The player's hit on [target], as [attack] has it, but a hit from a spin, [spun], which no shield stops. */
+    /** The player's hit on [target], as [attack] has it, from a spin or not, [spun]. */
     private fun strike(target: Session, spun: Boolean = false) {
         // Hitting lowers the player's own shield, which takes as long to block again as raising it did.
         if (shieldRaisedAt != null) shieldRaisedAt = aliveTicks
@@ -4054,7 +4054,7 @@ class Session(
         val impaling = if (target.inWaterOrRain) impalingDamage(held?.levelOf(IMPALING) ?: 0) else 0f
         val damage = withStrength(attackDamage(held), effects.level(Effect.STRENGTH), effects.level(Effect.WEAKNESS)) + sharpness + impaling +
             (fallen?.let { smashDamage(it, held?.levelOf(DENSITY) ?: 0) } ?: 0f)
-        if (!spun && target.blocks(feet, held, if (crit) critical(damage) else damage)) {
+        if (target.blocks(feet, held, if (crit) critical(damage) else damage)) {
             // Fire Aspect sets them burning all the same, and the shield knocks the player back.
             held?.levelOf(FIRE_ASPECT)?.takeIf { it > 0 }?.let { target.setOnFire(it * FIRE_ASPECT_TICKS) }
             knockBack(target.feet, extra = 0f)
@@ -4089,22 +4089,20 @@ class Session(
 
     /**
      * The player's spin, launched by Riptide, ending, as their client says.
-     * Their client ends it as it would carry them into someone, and bounces
-     * them back off, itself, telling Kore nothing more, so Kore looks along
-     * the way they were heading the tick before, as their client did: each
-     * player they'd have run into takes their hit, as a hit with what they
-     * hold, which no shield stops, unless combat or projectiles are switched
-     * off, or the pvp rule says no.
+     * Their client ends it as it finds someone near them at the start of a
+     * tick, and bounces them back off, itself, telling Kore nothing more, so
+     * Kore looks where they were the tick before, as their client did: each
+     * player that near takes their hit, as a hit with what they hold, which
+     * a shield they face stops, as it does any hit, unless combat or
+     * projectiles are switched off, or the pvp rule says no.
      */
     private fun stopSpinning() {
         spinning = false
-        log.debug("{} stopped spinning", name)
-        val (from, along) = heading ?: return
+        val from = lastFeet ?: return
         if (!world.features.combat || !world.features.projectiles || !world.rules.pvp || dead || gameMode == GameMode.SPECTATOR) return
-        val start = Box.of(from, PLAYER_WIDTH, PLAYER_HEIGHT)
-        val end = Box.of(Vec3(from.x + along.x, from.y + along.y, from.z + along.z), PLAYER_WIDTH, PLAYER_HEIGHT)
-        val swept = Box(DoubleArray(3) { minOf(start.min[it], end.min[it]) }, DoubleArray(3) { maxOf(start.max[it], end.max[it]) }).grown(SPIN_SLACK)
-        val struck = viewers().filter { it !== this && it.isInGame && !it.dead && it.gameMode != GameMode.SPECTATOR && it.entityId in shownPlayers && it.hitbox.overlaps(swept) }
+        val near = Box.of(from, PLAYER_WIDTH, PLAYER_HEIGHT).grown(SPIN_REACH)
+        val struck = viewers().filter { it !== this && it.isInGame && !it.dead && it.gameMode != GameMode.SPECTATOR && it.entityId in shownPlayers && it.hitbox.overlaps(near) }
+        log.debug("{} stopped spinning, having been at {}, into {}", name, from, struck.map { it.name })
         for (target in struck) {
             strike(target, spun = true)
             if (dead) return
@@ -5013,8 +5011,13 @@ private const val ARROW_PICKUP_DELAY = 5
 private const val ARROW_PICKUP_ACROSS = 1.0
 private const val ARROW_PICKUP_UP = 0.5
 
-/** How far beyond the way a spinning player was heading Kore looks for whoever their client ran into, for where it saw them, in blocks. */
-private const val SPIN_SLACK = 0.3
+/**
+ * How far beyond a spinning player's box their client finds whoever they
+ * spin into, each way, in blocks. Logged tests bear it out: everyone a spin
+ * ended on was within it, the furthest 0.91 off, and everyone it passed,
+ * beyond it.
+ */
+private const val SPIN_REACH = 1.0
 
 /** How many bits a snowball or an egg bursts into where it hits. */
 private const val BURST_PARTICLES = 6

@@ -662,7 +662,7 @@ class PlayersTest {
     }
 
     @Test
-    fun `a Riptide spin hurts whoever it ends on, as a hit with the trident that their shield doesn't stop, and others see it spin`() {
+    fun `a Riptide spin hurts whoever it ends on, as a hit with the trident that their shield stops from in front, and others see it spin`() {
         val steve = Client(1, "Steve", "1111")
         val alex = Client(2, "Alex", "2222")
         alex.session.give(ItemStack(shield))
@@ -673,18 +673,40 @@ class PlayersTest {
         tick()
         repeat(10) { alex.session.tickHealth() }
 
-        // A spin that ends with nobody in the way hurts nobody.
+        // A spin that ends with nobody near hurts nobody, nor one that ends a little over a block from Alex.
         steve.moves(Vec3(8.5f, -61.38f, 2.5f), inputs = listOf(START_SPIN_ATTACK), delta = Vec3(0f, 0f, -1.6f))
         tick()
         assertTrue(alex.received().any { it.contentEquals(SetActorData(1, listOf(flagsItem(shownFlags(ActorFlag.DAMAGE_NEARBY_MOBS)), FloatItem(ActorDataId.HEIGHT, 1.8f))).encode()) })
         steve.moves(Vec3(8.5f, -61.38f, 2.82f), inputs = listOf(STOP_SPIN_ATTACK), delta = Vec3(0f, 0f, 0.29f))
+        steve.moves(Vec3(0.5f, -61.38f, 2.4f), inputs = listOf(START_SPIN_ATTACK), delta = Vec3(0f, 0f, 1.6f))
+        steve.moves(Vec3(0.5f, -61.38f, 2.6f), inputs = listOf(STOP_SPIN_ATTACK), delta = Vec3(0f, 0f, 0.29f))
         assertEquals(20f, alex.session.vitals.health)
 
-        // Heading at Alex from two blocks south, Steve's client bounces back off him.
-        steve.moves(Vec3(0.5f, -61.38f, 2.5f), inputs = listOf(START_SPIN_ATTACK), delta = Vec3(0f, 0f, -1.6f))
-        steve.moves(Vec3(0.5f, -61.38f, 2.82f), inputs = listOf(STOP_SPIN_ATTACK), delta = Vec3(0f, 0f, 0.29f))
+        // Under a block in front of Alex, heading away, Steve's client bounces back off him all the same, and his shield takes it.
+        steve.moves(Vec3(0.5f, -61.38f, 1.5f), inputs = listOf(START_SPIN_ATTACK), delta = Vec3(0f, 0f, 1.7f))
+        steve.moves(Vec3(0.5f, -61.38f, 1.26f), inputs = listOf(STOP_SPIN_ATTACK), delta = Vec3(0f, 0f, -0.13f))
+        assertEquals(20f, alex.session.vitals.health)
+        assertTrue(alex.session.heldStack!!.damage > 0, "the shield wears for it")
+
+        // From behind him, it hurts him.
+        steve.moves(Vec3(0.5f, -61.38f, -0.5f), inputs = listOf(START_SPIN_ATTACK), delta = Vec3(0f, 0f, -1.7f))
+        steve.moves(Vec3(0.5f, -61.38f, -0.26f), inputs = listOf(STOP_SPIN_ATTACK), delta = Vec3(0f, 0f, 0.13f))
         assertEquals(11f, alex.session.vitals.health)
         assertEquals(1, steve.session.heldStack?.damage)
+    }
+
+    @Test
+    fun `a Riptide spin that ends as it starts ends on whoever was near its thrower as Riptide launched them`() {
+        val steve = Client(1, "Steve", "1111")
+        val alex = Client(2, "Alex", "2222")
+        alex.moves(Vec3(0.5f, -61.38f, 0.5f))
+        steve.session.give(ItemStack(trident).withEnchantments(listOf(EnchantmentLevel(RIPTIDE, 3))))
+        // Standing still, nine tenths of a block from Alex's side.
+        steve.moves(Vec3(2.0f, -61.38f, 0.5f), yaw = 90f, inputs = listOf(VERTICAL_COLLISION))
+        tick()
+
+        steve.moves(Vec3(2.3f, -61.38f, 0.5f), yaw = 90f, inputs = listOf(START_SPIN_ATTACK, STOP_SPIN_ATTACK), delta = Vec3(0.27f, 0f, 0f))
+        assertEquals(11f, alex.session.vitals.health)
     }
 
     /** A player's flags as others see them, standing, with [extra]. */
