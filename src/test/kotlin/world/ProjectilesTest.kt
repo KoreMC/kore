@@ -122,6 +122,38 @@ class ProjectilesTest {
     }
 
     @Test
+    fun `a firework rocket shot from a crossbow flies straight on until its fuse runs out, and bursts where it is`() {
+        val rocket = world.spawnProjectile(ProjectileKind.FIREWORK, thrower = 1, Vec3(0.5f, -50f, 0.5f), Vec3(1.6f, 0f, 0f), fuse = 20)
+        repeat(20) { assertTrue(world.tickProjectiles(emptyMap()).isEmpty()) }
+        assertEquals(32.5f, rocket.position.x, 1e-3f)
+        assertEquals(-50f, rocket.position.y)
+
+        val hits = world.tickProjectiles(emptyMap())
+        assertEquals(listOf<ProjectileHit>(ProjectileHit.Air(rocket, rocket.position)), hits)
+        assertTrue(rocket !in world.projectiles)
+    }
+
+    @Test
+    fun `a firework rocket flies through whoever's in its way, and slides on along the ground it meets`() {
+        val rocket = world.spawnProjectile(ProjectileKind.FIREWORK, thrower = 1, Vec3(0.5f, -62f, 0.5f), Vec3(0.5f, -0.5f, 0f), fuse = 30)
+        val inTheWay = mapOf(2L to Box.player(Vec3(1.5f, -63f, 0.5f)))
+        repeat(4) { assertTrue(world.tickProjectiles(inTheWay).isEmpty()) }
+
+        assertEquals(-63f, rocket.position.y, 1e-4f)
+        assertEquals(2.5f, rocket.position.x, 1e-4f)
+        assertEquals(Vec3(0.5f, 0f, 0f), rocket.velocity)
+    }
+
+    @Test
+    fun `a firework rocket launched by hand climbs faster and faster, and speeds up across`() {
+        val rocket = world.spawnProjectile(ProjectileKind.FIREWORK, thrower = 1, Vec3(0.5f, -62.85f, 0.5f), Vec3(0.001f, 0.05f, 0f), fuse = 30, climbs = true)
+        repeat(3) { world.tickProjectiles(emptyMap()) }
+        assertEquals(0.05f + 3 * 0.04f, rocket.velocity.y, 1e-5f)
+        assertEquals(0.001f * 1.15f * 1.15f * 1.15f, rocket.velocity.x, 1e-7f)
+        assertEquals(-62.85f + (0.09f + 0.13f + 0.17f), rocket.position.y, 1e-4f)
+    }
+
+    @Test
     fun `a wind charge flies straight on, neither slowing nor falling, until it bursts high enough above the world`() {
         val charge = world.spawnProjectile(ProjectileKind.WIND_CHARGE, thrower = 1, Vec3(0.5f, -50f, 0.5f), Vec3(1.5f, 0f, 0f))
         repeat(10) { world.tickProjectiles(emptyMap()) }

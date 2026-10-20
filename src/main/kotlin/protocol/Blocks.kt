@@ -345,6 +345,12 @@ data class LevelSoundEvent(
         const val CROSSBOW_QUICK_CHARGE_END = "crossbow.quick_charge.end"
         const val CROSSBOW_SHOOT = "crossbow.shoot"
 
+        /** A firework rocket going up, and a star of it bursting, a large ball louder, and twinkling. */
+        const val LAUNCH = "launch"
+        const val BLAST = "blast"
+        const val LARGE_BLAST = "large.blast"
+        const val TWINKLE = "twinkle"
+
         /**
          * A trident thrown, hitting someone, hitting the ground, setting off
          * back to whoever threw it, calling lightning, and launching the

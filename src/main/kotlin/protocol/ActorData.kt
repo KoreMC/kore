@@ -1,6 +1,7 @@
 package org.koremc.protocol
 
 import io.netty.buffer.ByteBuf
+import org.cloudburstmc.nbt.NbtMap
 
 private const val SET_ACTOR_DATA = 39
 
@@ -17,6 +18,8 @@ enum class ActorDataId(val id: Int) {
     /** The colour of the particles an area effect cloud gives off, as ARGB, and whether they're as faint as a beacon's, as a byte. */
     EFFECT_COLOR(8),
     EFFECT_AMBIENCE(9),
+    /** The firework a rocket is, as its item's NBT, which the client bursts it into the stars of. */
+    DISPLAY_FIREWORK(16),
     /** What potion a tipped arrow shows it's tipped with, past the plain potions, as its number and 1, as a byte. */
     CUSTOM_DISPLAY(18),
     /** What potion a tipped arrow's tipped with, or a thrown potion is, by its number, as a short. */
@@ -94,6 +97,8 @@ data class LongItem(override val id: ActorDataId, val value: Long) : DataItem
 
 data class StringItem(override val id: ActorDataId, val value: String) : DataItem
 
+data class NbtItem(override val id: ActorDataId, val value: NbtMap) : DataItem
+
 /** The flags item for [flags], of those below bit 64, which it holds. */
 fun flagsItem(flags: Set<ActorFlag>) = LongItem(ActorDataId.FLAGS, bitsOf(flags, from = 0))
 
@@ -127,6 +132,7 @@ private const val SHORT = 1
 private const val INT = 2
 private const val FLOAT = 3
 private const val STRING = 4
+private const val COMPOUND = 5
 private const val LONG = 7
 
 /** [items] as an actor's synced data list, as both `SetActorData` and the packets adding actors carry it. */
@@ -142,6 +148,7 @@ internal fun ByteBuf.writeActorData(items: List<DataItem>): ByteBuf {
             is FloatItem -> writeType(FLOAT).writeFloatLE(item.value)
             is LongItem -> writeType(LONG).writeVarLong(item.value)
             is StringItem -> writeType(STRING).writeString(item.value)
+            is NbtItem -> writeType(COMPOUND).writeNbt(item.value)
         }
     }
     return this

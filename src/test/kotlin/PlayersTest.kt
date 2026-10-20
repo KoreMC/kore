@@ -17,6 +17,7 @@ import org.koremc.protocol.ActorFlag
 import org.koremc.protocol.Animate
 import org.koremc.protocol.BatchCodec
 import org.koremc.protocol.DeathInfo
+import org.koremc.protocol.Difficulty
 import org.koremc.protocol.Disconnect
 import org.koremc.protocol.FloatItem
 import org.koremc.protocol.GameMode
@@ -124,6 +125,7 @@ private const val TRIDENT = 12
 private const val WIND_CHARGE = 13
 private const val SPLASH_POTION = 14
 private const val LINGERING_POTION = 15
+private const val FIREWORK = 16
 
 /** The input flag set on the tick a player lands. */
 private const val VERTICAL_COLLISION = 50
@@ -152,12 +154,13 @@ class PlayersTest {
     private val windCharge = ItemDefinition("minecraft:wind_charge", WIND_CHARGE, componentBased = false, ItemVersion.NONE)
     private val splashPotion = ItemDefinition("minecraft:splash_potion", SPLASH_POTION, componentBased = false, ItemVersion.NONE, maxStackSize = 1)
     private val lingeringPotion = ItemDefinition("minecraft:lingering_potion", LINGERING_POTION, componentBased = false, ItemVersion.NONE, maxStackSize = 1)
+    private val firework = ItemDefinition("minecraft:firework_rocket", FIREWORK, componentBased = false, ItemVersion.NONE)
 
     /** What every player had when they last left, or null for players new to the world. */
     private var saved: NbtMap? = null
     private val game = GameData(
         world, emptyList(), org.koremc.protocol.BlockDefinitions(emptyList()), creative, emptyMap(), Drops(emptyList(), creative, palette),
-        items = ItemStacks(listOf(helmet, chestplate, shield, sword, axe, mace, snowball, enderPearl, bow, arrow, crossbow, trident, windCharge, splashPotion, lingeringPotion), creative, palette),
+        items = ItemStacks(listOf(helmet, chestplate, shield, sword, axe, mace, snowball, enderPearl, bow, arrow, crossbow, trident, windCharge, splashPotion, lingeringPotion, firework), creative, palette),
         players = object : PlayerSaves {
             override fun load(player: UUID) = saved
 
@@ -260,6 +263,17 @@ class PlayersTest {
                 Unpooled.buffer().writeVarUInt(30).writeVarInt(0).writeBoolean(false).writeVarUInt(0).writeVarUInt(2)
                     .writeVarUInt(2).writeBoolean(false).writeBoolean(true).writeVarUInt(0).writeVarUInt(0).heldItem(0).heldItem(held) // Into the world
                     .writeVarUInt(0).writeBoolean(true).writeByte(0).writeBoolean(false).writeVarUInt(0).heldItem(held).heldItem(0), // Out of slot 0
+            ),
+        )
+
+        /** Clicks the top of the block at [pos], holding the item numbered [held] in hotbar slot 0, from the spawn. */
+        fun clicks(pos: BlockPos, held: Int) = sends(
+            ByteBufUtil.getBytes(
+                Unpooled.buffer().writeVarUInt(30).writeVarInt(0).writeBoolean(false).writeVarUInt(2).writeVarUInt(0)
+                    .writeVarInt(0).writeByte(1).writeBlockPos(pos).writeByte(1).writeVarInt(0).writeByte(0).heldItem(held)
+                    .writeFloatLE(0.5f).writeFloatLE(-61.38f).writeFloatLE(0.5f) // Where they stood
+                    .writeFloatLE(0.5f).writeFloatLE(1f).writeFloatLE(0.5f) // Where on the block they clicked
+                    .writeVarUInt(world.blockAt(pos)).writeBoolean(true).writeByte(0),
             ),
         )
 
@@ -751,6 +765,108 @@ class PlayersTest {
         steve.session.give(ItemStack(bow))
         steve.releases(BOW)
         assertTrue(world.projectiles.isEmpty(), "letting go of the bow they took up again shoots nothing")
+    }
+
+    @Test
+    fun `a crossbow loads a firework rocket from the offhand, firing it slowly for three times the wear, through whoever's in its way, to burst once it's flown`() {
+        val star = NbtMap.builder().putByte("FireworkType", 1).putBoolean("FireworkFlicker", false).build()
+        val rocket = ItemStack(firework).copy(
+            nbt = NbtMap.builder().putCompound("Fireworks", NbtMap.builder().putByte("Flight", 1).putList("Explosions", NbtType.COMPOUND, listOf(star)).build()).build(),
+        )
+        saved = NbtMap.builder()
+            .putList("Inventory", NbtType.COMPOUND, listOf(ItemStacks.nbtOf(ItemStack(crossbow), 0)))
+            .putList("Offhand", NbtType.COMPOUND, listOf(ItemStacks.nbtOf(rocket, 0)))
+            .build()
+        val steve = Client(1, "Steve", "1111")
+        val alex = Client(2, "Alex", "2222")
+        alex.moves(Vec3(6.5f, -61.38f, 0.5f))
+        tick()
+
+        // Steve, at the spawn, loads, then fires east, at Alex, six blocks off.
+        steve.moves(Vec3(0.5f, -61.38f, 0.5f), yaw = -90f)
+        steve.throws(CROSSBOW)
+        repeat(25) { steve.session.tickHealth() }
+        steve.throws(CROSSBOW)
+        val charged = steve.session.heldStack!!.nbt.getCompound("chargedItem")
+        assertEquals("minecraft:firework_rocket", charged.getString("Name"))
+        assertEquals(rocket.nbt, charged.getCompound("tag"))
+        steve.throws(CROSSBOW)
+        val shot = world.projectiles.single()
+        assertEquals(ProjectileKind.FIREWORK, shot.kind)
+        assertEquals(0.5f, shot.velocity.x, 1e-5f)
+        assertEquals(rocket.nbt, shot.item?.nbt)
+        assertEquals(3, steve.session.heldStack?.damage)
+        val shotFrom = Vec3(0.5f, -61.38f - 0.15f, 0.5f)
+        assertTrue(alex.received().any { it.contentEquals(LevelSoundEvent(LevelSoundEvent.LAUNCH, shotFrom, -1, entityType = "minecraft:fireworks_rocket").encode()) })
+        alex.session.syncProjectiles()
+        // The client takes the rocket's flight and stars, as its item's NBT has them, and hears it go.
+        val flying = AddProjectile(shot.id, "minecraft:fireworks_rocket", 1, shot.position, shot.velocity, shot.pitch, shot.yaw, firework = rocket.nbt)
+        val launched = alex.received()
+        assertTrue(launched.any { it.contentEquals(flying.encode(GameVersion.OLDEST)) }, "shown as the rocket it is")
+        repeat(19) { clients.map { it.session }.flyProjectiles(game) }
+        assertTrue(shot in world.projectiles && shot.position.x > 7f, "through Alex, at ${shot.position}")
+
+        repeat(13) { clients.map { it.session }.flyProjectiles(game) }
+        assertTrue(shot !in world.projectiles)
+        val got = alex.received()
+        assertTrue(got.any { it.contentEquals(ActorEvent(shot.id, ActorEvent.FIREWORKS_EXPLODE, 0).encode()) })
+        assertTrue(got.any { it.contentEquals(LevelSoundEvent(LevelSoundEvent.LARGE_BLAST, shot.position, -1, entityType = "minecraft:fireworks_rocket").encode()) })
+        assertTrue(shot.position.x in 10f..17f, "a dozen blocks or so off, at ${shot.position}")
+        assertEquals(20f, alex.session.vitals.health, "too far off by then")
+    }
+
+    @Test
+    fun `a firework rocket's burst hurts whoever's near, the less the further off, but nobody in peace`() {
+        val steve = Client(1, "Steve", "1111")
+        val alex = Client(2, "Alex", "2222")
+        alex.moves(Vec3(2.5f, -61.38f, 0.5f))
+        tick()
+        val star = NbtMap.builder().putByte("FireworkType", 0).putBoolean("FireworkFlicker", false).build()
+        val rocket = ItemStack(firework).copy(
+            nbt = NbtMap.builder().putCompound("Fireworks", NbtMap.builder().putByte("Flight", 1).putList("Explosions", NbtType.COMPOUND, listOf(star)).build()).build(),
+        )
+
+        // Bursting at once, at the height of Alex's feet, two blocks from him.
+        world.spawnProjectile(ProjectileKind.FIREWORK, thrower = 1, Vec3(0.5f, -63f, 0.5f), Vec3(0f, 0f, 0f), item = rocket, fuse = 0)
+        clients.map { it.session }.flyProjectiles(game)
+        assertEquals(20f - 7f * kotlin.math.sqrt(0.6f), alex.session.vitals.health, 1e-4f)
+        assertEquals(13f, steve.session.vitals.health, "right on Steve, all seven")
+
+        world.difficulty = Difficulty.PEACEFUL
+        repeat(20) { alex.session.tickHealth() }
+        val health = alex.session.vitals.health
+        world.spawnProjectile(ProjectileKind.FIREWORK, thrower = 1, Vec3(0.5f, -63f, 0.5f), Vec3(0f, 0f, 0f), item = rocket, fuse = 0)
+        clients.map { it.session }.flyProjectiles(game)
+        assertEquals(health, alex.session.vitals.health)
+    }
+
+    @Test
+    fun `a firework rocket used on the ground launches from there, climbing faster and faster, to burst in the air once it's flown`() {
+        val steve = Client(1, "Steve", "1111")
+        val star = NbtMap.builder().putByte("FireworkType", 0).putBoolean("FireworkFlicker", true).build()
+        steve.session.give(
+            ItemStack(firework).copy(nbt = NbtMap.builder().putCompound("Fireworks", NbtMap.builder().putByte("Flight", 1).putList("Explosions", NbtType.COMPOUND, listOf(star)).build()).build()),
+        )
+        steve.received()
+
+        // On top of the stone four blocks east.
+        steve.clicks(BlockPos(4, -64, 0), held = FIREWORK)
+        val launched = world.projectiles.single()
+        assertTrue(launched.climbs)
+        assertEquals(4.5f, launched.position.x, 0.01f)
+        assertEquals(-62.85f, launched.position.y, 1e-4f)
+        assertNull(steve.session.heldStack, "used up")
+        assertTrue(steve.received().any { it.contentEquals(LevelSoundEvent(LevelSoundEvent.LAUNCH, launched.position, -1, entityType = "minecraft:fireworks_rocket").encode()) })
+
+        repeat(10) { clients.map { it.session }.flyProjectiles(game) }
+        assertEquals(0.45f, launched.velocity.y, 1e-5f)
+        assertTrue(launched.position.y > -60.5f, "climbing, at ${launched.position}")
+        steve.received()
+        repeat(22) { clients.map { it.session }.flyProjectiles(game) }
+        assertTrue(launched !in world.projectiles)
+        val burst = steve.received()
+        assertTrue(burst.any { it.contentEquals(ActorEvent(launched.id, ActorEvent.FIREWORKS_EXPLODE, 0).encode()) })
+        assertTrue(burst.any { it.contentEquals(LevelSoundEvent(LevelSoundEvent.TWINKLE, launched.position, -1, entityType = "minecraft:fireworks_rocket").encode()) })
     }
 
     @Test

@@ -241,8 +241,10 @@ class FlatWorld(
 
     /**
      * Sets [kind] flying from [position], thrown or shot by the entity
-     * [thrower], moving at [velocity], for an arrow, shot with [arrow], and
-     * for a trident, as [item], thrown in creative or not, [fromCreative].
+     * [thrower], moving at [velocity], for an arrow, shot with [arrow], for
+     * a trident, as [item], thrown in creative or not, [fromCreative], and
+     * for a thrown potion or firework rocket, as [item] too, a rocket to
+     * burst after [fuse] ticks, climbing, if it [climbs].
      */
     fun spawnProjectile(
         kind: ProjectileKind,
@@ -252,7 +254,9 @@ class FlatWorld(
         arrow: ArrowShot? = null,
         item: ItemStack? = null,
         fromCreative: Boolean = false,
-    ): Projectile = Projectile(newEntityId(), kind, thrower, position, velocity, arrow, item, fromCreative).also { projectileEntities[it.id] = it }
+        fuse: Int = 0,
+        climbs: Boolean = false,
+    ): Projectile = Projectile(newEntityId(), kind, thrower, position, velocity, arrow, item, fromCreative, fuse, climbs).also { projectileEntities[it.id] = it }
 
     fun removeProjectile(id: Long) {
         projectileEntities.remove(id)

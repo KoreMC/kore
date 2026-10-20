@@ -99,6 +99,15 @@ private const val LEAST_FORCE = 0.1f
 const val BOW_SPEED = 3f
 const val CROSSBOW_SPEED = 3.15f
 
+/**
+ * How fast a firework rocket leaves a crossbow, in blocks a tick, as a
+ * dispenser fires one, which takes a rocket of the least flight a dozen
+ * blocks or so before it bursts, as Bedrock's do, and how much a crossbow
+ * wears for firing one.
+ */
+const val CROSSBOW_FIREWORK_SPEED = 0.5f
+const val CROSSBOW_FIREWORK_WEAR = 3
+
 /** How long a trident must be drawn back before it's thrown, in ticks, how fast it flies, in blocks a tick, and how hard it hits. */
 const val TRIDENT_CHARGE_TICKS = 10
 const val TRIDENT_SPEED = 4f

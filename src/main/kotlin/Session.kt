@@ -226,6 +226,8 @@ import org.koremc.world.CLIMATE_VARIANT
 import org.koremc.world.CLIMATE_VARIANTS
 import org.koremc.world.CRAFTER_SLOTS
 import org.koremc.world.CRITICAL_HIT_PARTICLES
+import org.koremc.world.CROSSBOW_FIREWORK_SPEED
+import org.koremc.world.CROSSBOW_FIREWORK_WEAR
 import org.koremc.world.CROSSBOW_SPEED
 import org.koremc.world.Cartographed
 import org.koremc.world.Changes
@@ -247,6 +249,7 @@ import org.koremc.world.ExperienceOrb
 import org.koremc.world.FALLING_BLOCK_SIZE
 import org.koremc.world.FILLED_MAP
 import org.koremc.world.FIRE_ASPECT_TICKS
+import org.koremc.world.FIREWORK_ROCKET
 import org.koremc.world.FIRE_CHARGE
 import org.koremc.world.FLAME_TICKS
 import org.koremc.world.FLINT_AND_STEEL
@@ -273,6 +276,7 @@ import org.koremc.world.JUMP_EXHAUSTION
 import org.koremc.world.KNOCKBACK_FORCE
 import org.koremc.world.KNOCKBACK_HEIGHT
 import org.koremc.world.KNOCKBACK_PER_LEVEL
+import org.koremc.world.LAUNCH_DRIFT
 import org.koremc.world.LOCATOR
 import org.koremc.world.Liquid
 import org.koremc.world.MAX_BERRY_GROWTH
@@ -302,6 +306,7 @@ import org.koremc.world.Projectile
 import org.koremc.world.ProjectileHit
 import org.koremc.world.ProjectileKind
 import org.koremc.world.REGENERATION_EXHAUSTION
+import org.koremc.world.ROCKET_START
 import org.koremc.world.SHIELD
 import org.koremc.world.SHIELD_COOLDOWN
 import org.koremc.world.SHIELD_DISABLED_TICKS
@@ -341,6 +346,7 @@ import org.koremc.world.biteCake
 import org.koremc.world.blockPlacedBy
 import org.koremc.world.blowOn
 import org.koremc.world.bowForce
+import org.koremc.world.burstsLarge
 import org.koremc.world.breakBlock
 import org.koremc.world.breakTicks
 import org.koremc.world.breaksInCreative
@@ -348,6 +354,7 @@ import org.koremc.world.cauldronNudge
 import org.koremc.world.centre
 import org.koremc.world.chestHalves
 import org.koremc.world.chunksAround
+import org.koremc.world.clearBetween
 import org.koremc.world.corner
 import org.koremc.world.critical
 import org.koremc.world.critsWith
@@ -367,6 +374,10 @@ import org.koremc.world.fertilize
 import org.koremc.world.fertilizeSeabed
 import org.koremc.world.fillBucket
 import org.koremc.world.fillPortalFrame
+import org.koremc.world.fireworkDamage
+import org.koremc.world.fireworkDisplay
+import org.koremc.world.fireworkFuse
+import org.koremc.world.fireworkStars
 import org.koremc.world.furnaceKind
 import org.koremc.world.goesOnLectern
 import org.koremc.world.grown
@@ -453,6 +464,7 @@ import org.koremc.world.tickSky
 import org.koremc.world.toggleCrafterSlot
 import org.koremc.world.tuneNote
 import org.koremc.world.turnPage
+import org.koremc.world.twinkles
 import org.koremc.world.updatePower
 import org.koremc.world.usable
 import org.koremc.world.use
@@ -2274,8 +2286,8 @@ class Session(
     /**
      * The player using the crossbow they hold, [held], unless projectiles
      * are switched off: one that's loaded fires, straight away, and one
-     * that isn't starts loading, unless they've no arrow, outside
-     * creative. While it loads, the client goes on asking once each time a
+     * that isn't starts loading, unless they've no arrow, or firework rocket
+     * in their offhand, outside creative. While it loads, the client goes on asking once each time a
      * load would have finished, and the first to come once it has, loads
      * it. Held down after firing, the client starts it loading again a
      * moment later.
@@ -2286,7 +2298,7 @@ class Session(
         val started = loading?.takeIf { it.slot == heldSlot }
         val quickCharge = held.stack.levelOf(QUICK_CHARGE)
         if (started == null) {
-            if (!creative && arrowToShoot() == null) return
+            if (!creative && crossbowAmmo() == null) return
             loading = Drawing(heldSlot, aliveTicks)
             send(SetActorData(entityId, listOf(flagsItem(playerFlags()))))
             val sound = if (quickCharge > 0) LevelSoundEvent.CROSSBOW_QUICK_CHARGE_START else LevelSoundEvent.CROSSBOW_LOADING_START
@@ -2307,8 +2319,8 @@ class Session(
 
     /**
      * Loads the crossbow the player holds, [held], with the arrow they'd
-     * shoot, which it uses up, outside creative, where it's a plain arrow if
-     * they have none. The client hears all of it together, and nothing of
+     * shoot, or the firework rocket in their offhand, which it uses up,
+     * outside creative, where it's a plain arrow if they have neither. The client hears all of it together, and nothing of
      * what it holds after: the arrow gone, the crossbow loaded, under its
      * stack's own ID, that it's done charging, and that the player's no
      * longer using it. Hearing of it otherwise, it takes the crossbow up
@@ -2317,7 +2329,7 @@ class Session(
      */
     private fun loadCrossbow(held: SlotStack) {
         loading = null
-        val loaded = arrowToShoot()
+        val loaded = crossbowAmmo()
         val arrow = loaded?.let { (container, slot) -> container[slot] }
         val ammo = arrow?.stack?.copy(count = 1) ?: game.items.of(ARROW)?.takeIf { creative } ?: return
         val packets = mutableListOf<ServerPacket>()
@@ -2325,7 +2337,8 @@ class Session(
             val (container, slot, window) = loaded
             packets += replaceSlot(container, slot, window, arrow.stack.copy(count = arrow.stack.count - 1).takeIf { it.count > 0 })
         }
-        val charged = NbtMap.builder().putString("Name", ammo.item.name).putByte("Count", 1).putShort("Damage", ammo.aux.toShort()).putByte("WasPickedUp", 0).build()
+        val charged = NbtMap.builder().putString("Name", ammo.item.name).putByte("Count", 1).putShort("Damage", ammo.aux.toShort()).putByte("WasPickedUp", 0)
+            .apply { if (ammo.nbt.isNotEmpty()) putCompound("tag", ammo.nbt) }.build()
         inventory.items[heldSlot] = held.copy(stack = held.stack.copy(nbt = held.stack.nbt.toBuilder().putCompound(CHARGED_ITEM, charged).build()))
         packets += slotOf(heldSlot)
         packets += ActorEvent(entityId, ActorEvent.FINISHED_CHARGING_ITEM, 0)
@@ -2341,18 +2354,26 @@ class Session(
      * Fires the crossbow the player holds, [held]: its arrow, critical, from
      * a little below their eyes, the way they look, and with Multishot, two
      * more either side, which can't be picked up again, and with Piercing,
-     * through as many more as its level. It wears for each arrow, under the
-     * same stack ID, as the use that fired it is answered, and everyone
-     * around hears it.
+     * through as many more as its level. A firework rocket flies off from a
+     * little lower, much slower, to burst once it's flown, and Multishot
+     * fires two more of it. It wears for
+     * each arrow, and three times as much for each rocket, under the same
+     * stack ID, as the use that fired it is answered, and everyone around
+     * hears it.
      */
     private fun fireCrossbow(held: SlotStack) {
         val crossbow = held.stack
         val ammo = crossbow.nbt.getCompound(CHARGED_ITEM)
         val potion = ammo.getShort("Damage").toInt().takeIf { it > 0 }?.minus(1)
+        val rocket = game.items.of(FIREWORK_ROCKET)?.takeIf { ammo.getString("Name") == FIREWORK_ROCKET }?.copy(nbt = ammo.getCompound("tag", NbtMap.EMPTY))
         val turns = if (crossbow.levelOf(MULTISHOT) > 0) listOf(0f, -MULTISHOT_SPREAD, MULTISHOT_SPREAD) else listOf(0f)
         val from = eyes()
         for (turn in turns) {
             val look = lookVector(yaw + turn, pitch)
+            if (rocket != null) {
+                launchRocket(rocket, Vec3(from.x, from.y - FIREWORK_DROP, from.z), Vec3(look.x * CROSSBOW_FIREWORK_SPEED, look.y * CROSSBOW_FIREWORK_SPEED, look.z * CROSSBOW_FIREWORK_SPEED))
+                continue
+            }
             val shot = ArrowShot(ARROW_DAMAGE, critical = true, returned = !creative && turn == 0f, potion = potion, piercing = crossbow.levelOf(PIERCING))
             world.spawnProjectile(
                 ProjectileKind.ARROW, entityId, Vec3(from.x, from.y - ProjectileKind.ARROW.drop, from.z),
@@ -2360,11 +2381,41 @@ class Session(
             )
         }
         val unloaded = crossbow.copy(nbt = crossbow.nbt.toBuilder().apply { remove(CHARGED_ITEM) }.build())
-        val worn = if (creative) unloaded else unloaded.worn(turns.size)
+        val worn = if (creative) unloaded else unloaded.worn(turns.size * if (rocket != null) CROSSBOW_FIREWORK_WEAR else 1)
         inventory.items[heldSlot] = worn?.let { held.copy(stack = it) }
         if (worn == null) showAround(position.toBlockPos(), LevelSoundEvent(LevelSoundEvent.BREAK, position, -1))
         showAround(position.toBlockPos(), LevelSoundEvent(LevelSoundEvent.CROSSBOW_SHOOT, position, -1))
         log.debug("{} fired their crossbow", name)
+    }
+
+    /**
+     * Sends the firework rocket [rocket] off from [at], moving at
+     * [velocity], as the player's, to fly its fuse and burst, climbing, if
+     * it [climbs]. Everyone around hears it go.
+     */
+    private fun launchRocket(rocket: ItemStack, at: Vec3, velocity: Vec3, climbs: Boolean = false) {
+        world.spawnProjectile(ProjectileKind.FIREWORK, entityId, at, velocity, item = rocket, fuse = fireworkFuse(rocket), climbs = climbs)
+        showAround(at.toBlockPos(), LevelSoundEvent(LevelSoundEvent.LAUNCH, at, -1, entityType = ProjectileKind.FIREWORK.entity))
+    }
+
+    /**
+     * Launches the firework rocket the player holds, [held], from where they
+     * clicked the block at [pos], a little off its [face], to climb, faster
+     * and faster, and burst, drifting a little either way across. Outside
+     * creative, it's used up.
+     */
+    private fun launchFirework(use: ItemUse, pos: BlockPos, face: Face, held: ItemStack): ItemUsedOn {
+        val click = use.clickPosition
+        val at = Vec3(pos.x + click.x + face.dx * LAUNCH_OFF, pos.y + click.y + face.dy * LAUNCH_OFF, pos.z + click.z + face.dz * LAUNCH_OFF)
+        fun drift() = ((Random.nextDouble() - Random.nextDouble()) * LAUNCH_DRIFT).toFloat()
+        launchRocket(held.copy(count = 1), at, Vec3(drift(), ROCKET_START, drift()), climbs = true)
+        return ItemUsedOn(emptyList(), held = HeldAfter.USED_UP)
+    }
+
+    /** Where what a crossbow the player holds would load is: a firework rocket in their offhand, or else the arrow they'd shoot, as its container, slot and window. */
+    private fun crossbowAmmo(): Triple<Container, Int, Int>? {
+        if (inventory.offhand[0]?.stack?.item?.name == FIREWORK_ROCKET) return Triple(inventory.offhand, 0, OFFHAND_WINDOW)
+        return arrowToShoot()
     }
 
     /** Where the arrow the player would shoot is: in their offhand, or else the first slot of their items with one, as its container, slot and window. */
@@ -2798,6 +2849,7 @@ class Session(
             boneMeal -> world.fertilize(pos, clicked, game.items) ?: if (face == Face.UP) world.fertilizeSeabed(pos) else null
             held?.item?.name == ENDER_EYE -> world.fillPortalFrame(pos, clicked)
             held?.item?.name == FLINT_AND_STEEL || held?.item?.name == FIRE_CHARGE -> world.ignite(pos, face, held)
+            held?.item?.name == FIREWORK_ROCKET && world.features.projectiles -> launchFirework(use, pos, face, held)
             held != null -> world.useToolOn(pos, face, held, facing(yaw), game.items)
             else -> null
         } ?: return false
@@ -3475,6 +3527,7 @@ class Session(
                 packets += AddProjectile(
                     projectile.id, projectile.kind.entity, projectile.thrower, projectile.position, projectile.velocity, projectile.pitch, projectile.yaw,
                     flagsOf(projectile), properties, projectile.arrow?.potion, projectile.potion,
+                    projectile.item?.takeIf { projectile.kind == ProjectileKind.FIREWORK }?.let(::fireworkDisplay),
                 )
                 continue
             }
@@ -3521,6 +3574,19 @@ class Session(
         }
         val fresh = !vitals.inGrace
         if (hurt(projectile.kind.impact, DamageCause.PROJECTILE, by = thrower) && fresh) knockBack(from, extra = 0f)
+    }
+
+    /**
+     * The player caught in a firework rocket's burst at [at], shot by
+     * [shooter], which hurts them by [damage], and knocks them back, if it's
+     * the first hurt in a while, unless their shield covers it, or it's
+     * another player's and the pvp rule says no.
+     */
+    internal fun caughtInFirework(at: Vec3, damage: Float, shooter: Session?) {
+        if (shooter != null && shooter !== this && !world.rules.pvp) return
+        if (blocks(at, weapon = null, damage)) return
+        val fresh = !vitals.inGrace
+        if (hurt(damage, DamageCause.FIREWORKS, by = shooter) && fresh) knockBack(at, extra = 0f)
     }
 
     /**
@@ -5092,6 +5158,10 @@ internal fun Collection<Session>.flyProjectiles(game: GameData) {
             splashPotion(hit, target, thrower, game)
             continue
         }
+        if (projectile.kind == ProjectileKind.FIREWORK) {
+            burstFirework(projectile, hit.at, thrower, game)
+            continue
+        }
         target?.hitBy(projectile, thrower)
         if (projectile.kind == ProjectileKind.WIND_CHARGE) {
             windBurst(hit.at, game)
@@ -5127,6 +5197,34 @@ private fun Collection<Session>.splashPotion(hit: ProjectileHit, target: Session
         val off = player.feet.distanceTo(at)
         if (off >= SPLASH_REACH || !player.hitbox.overlaps(reach)) continue
         player.splashedBy(potion, if (player === target) 1.0 else 1.0 - off / SPLASH_REACH, thrower)
+    }
+}
+
+/**
+ * The firework [rocket] bursting at [at], once it's flown its fuse, shot
+ * by [shooter]: everyone around sees it burst there into its stars, and
+ * hears each, a large ball louder, and a twinkling one twinkle. One with
+ * stars hurts everyone within five blocks of it, whose feet or middle it
+ * can see, as [fireworkDamage] has it, but nobody in peace, as in Bedrock.
+ */
+private fun Collection<Session>.burstFirework(rocket: Projectile, at: Vec3, shooter: Session?, game: GameData) {
+    val stars = rocket.item?.fireworkStars.orEmpty()
+    val here = at.toBlockPos()
+    val rocketEntity = ProjectileKind.FIREWORK.entity
+    val sounds = stars.flatMap { star ->
+        listOfNotNull(
+            LevelSoundEvent(if (star.burstsLarge) LevelSoundEvent.LARGE_BLAST else LevelSoundEvent.BLAST, at, -1, entityType = rocketEntity),
+            LevelSoundEvent(LevelSoundEvent.TWINKLE, at, -1, entityType = rocketEntity).takeIf { star.twinkles },
+        )
+    }
+    val burst = listOf(MoveActorAbsolute(rocket.id, at, onGround = false, teleport = true, pitch = rocket.pitch, yaw = rocket.yaw), ActorEvent(rocket.id, ActorEvent.FIREWORKS_EXPLODE, 0))
+    showAround((burst + sounds).map { here to it })
+    if (game.world.difficulty == Difficulty.PEACEFUL) return
+    for (player in filter { it.isInGame && !it.dead && it.gameMode != GameMode.SPECTATOR }) {
+        val damage = fireworkDamage(stars.size, player.feet.distanceTo(at).toDouble()) ?: continue
+        val middle = Vec3(player.feet.x, player.feet.y + player.hitbox.let { (it.max[1] - it.min[1]).toFloat() } / 2, player.feet.z)
+        if (!game.world.clearBetween(at, player.feet) && !game.world.clearBetween(at, middle)) continue
+        player.caughtInFirework(at, damage, shooter)
     }
 }
 
@@ -5220,6 +5318,10 @@ private const val SPLASH_LEAST_TICKS = 20
 /** How much of drinking it a lingering potion's cloud gives each time it reaches someone: a quarter as long, and half as strong, for an instant effect. */
 private const val CLOUD_SHARE = 4
 private const val CLOUD_INSTANT_SHARE = 0.5
+
+/** How far below a crossbow's wielder's eyes a firework rocket leaves it, and how far off the face clicked a rocket launched by hand starts. */
+private const val FIREWORK_DROP = 0.15f
+private const val LAUNCH_OFF = 0.15f
 
 /** How high an item's eyes are, which a burst pushes it toward, as the game has them. */
 private const val ITEM_EYE_HEIGHT = 0.2125f

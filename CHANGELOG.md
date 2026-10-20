@@ -15,6 +15,9 @@ Each release, newest first, with the client version it's for. What's done since 
 - Bows shoot arrows as hard as they're drawn, critically when drawn all the way, with Power, Punch, Flame and Infinity, and
   tipped arrows. Crossbows load and fire, with Quick Charge, Multishot and Piercing. Arrows stick in what they hit, and are
   picked up again, giving back those that were used up
+- Firework rockets launch from the ground, climbing until they burst into their stars, and crossbows load them from the
+  offhand, firing them a dozen blocks or so, through whoever's in the way and along the ground, before they burst. A rocket
+  with stars hurts everyone near by how many it has, but nobody in peaceful
 - Tridents are thrown, hurting whoever they hit, the more with Impaling in water or rain, and stay where they land. Loyalty
   brings one back, Channeling calls lightning in a thunderstorm, and Riptide spins its thrower off in water or rain, into
   whoever they hit

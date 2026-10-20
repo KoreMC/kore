@@ -137,6 +137,8 @@ enum class ProjectileKind(
         "minecraft:wind_charge", "minecraft:wind_charge_projectile", "Wind Charge", gravity = 0.0, drag = 0.0, cooldown = ItemCooldown("wind_charge", WIND_CHARGE_COOLDOWN),
         width = WIND_CHARGE_SIZE, height = WIND_CHARGE_SIZE, impact = WIND_CHARGE_DAMAGE, deflects = true,
     ),
+    // It flies until it bursts, through whoever's in its way, and along whatever blocks are.
+    FIREWORK(null, "minecraft:fireworks_rocket", "Firework Rocket", gravity = 0.0, drag = 0.0),
     SPLASH_POTION("minecraft:splash_potion", "minecraft:splash_potion", "Potion", POTION_GRAVITY, drop = EYE_DROP, speed = POTION_SPEED, tilt = POTION_TILT),
     LINGERING_POTION("minecraft:lingering_potion", "minecraft:lingering_potion", "Lingering Potion", POTION_GRAVITY, drop = EYE_DROP, speed = POTION_SPEED, tilt = POTION_TILT),
     ;
@@ -178,7 +180,10 @@ data class ArrowShot(
  * moving at [velocity] blocks a tick, for an arrow, what it was shot with,
  * [arrow], and for a trident, its [item], as worn and enchanted as it was,
  * and whether it was thrown in creative, [fromCreative], which gives
- * nothing back.
+ * nothing back. A thrown potion or firework rocket is its [item] too, and
+ * a rocket bursts once it's flown for its [fuse], in ticks. One launched
+ * by hand [climbs], faster and faster, rather than flying straight on, as
+ * one shot from a crossbow does.
  */
 class Projectile(
     val id: Long,
@@ -189,6 +194,8 @@ class Projectile(
     val arrow: ArrowShot? = null,
     val item: ItemStack? = null,
     val fromCreative: Boolean = false,
+    val fuse: Int = 0,
+    val climbs: Boolean = false,
 ) {
     /** A trident's Loyalty, which brings it back to whoever threw it. */
     val loyalty = item?.levelOf(LOYALTY) ?: 0
@@ -354,7 +361,7 @@ sealed interface ProjectileHit {
     /** It hit the entity [entityId]. */
     data class Entity(override val projectile: Projectile, override val at: Vec3, val entityId: Long) : ProjectileHit
 
-    /** It burst in the open air, as a wind charge flown too high does. */
+    /** It burst in the open air, as a wind charge flown too high does, or a firework rocket that's flown its fuse. */
     data class Air(override val projectile: Projectile, override val at: Vec3) : ProjectileHit
 }
 
@@ -392,8 +399,8 @@ fun lookVector(yaw: Float, pitch: Float): Vec3 {
  * hurt them, or bounce off. A trident with Loyalty heads back to whoever
  * threw it, by their [eyes], once it's landed, or fallen out of the world,
  * flying through whatever's in the way. A wind charge bursts in the air
- * high enough above the world, and goes after a minute. Returns what each
- * that hit, hit.
+ * high enough above the world, and goes after a minute, and a firework
+ * rocket flies as [flyRocket] has it. Returns what each that hit, hit.
  */
 internal fun FlatWorld.tickProjectiles(targets: Map<Long, Box>, eyes: Map<Long, Vec3> = emptyMap()): List<ProjectileHit> {
     val hits = mutableListOf<ProjectileHit>()
@@ -419,9 +426,17 @@ internal fun FlatWorld.tickProjectiles(targets: Map<Long, Box>, eyes: Map<Long, 
         }
         val v = projectile.velocity
         val kind = projectile.kind
-        val velocity = Vec3((v.x * (1 - kind.drag)).toFloat(), (v.y * (1 - kind.drag) - kind.gravity).toFloat(), (v.z * (1 - kind.drag)).toFloat())
+        val velocity = if (projectile.climbs) {
+            Vec3(v.x * ROCKET_SPREAD, v.y + ROCKET_CLIMB, v.z * ROCKET_SPREAD)
+        } else {
+            Vec3((v.x * (1 - kind.drag)).toFloat(), (v.y * (1 - kind.drag) - kind.gravity).toFloat(), (v.z * (1 - kind.drag)).toFloat())
+        }
         val from = projectile.position
         val to = Vec3(from.x + velocity.x, from.y + velocity.y, from.z + velocity.z)
+        if (kind == ProjectileKind.FIREWORK) {
+            flyRocket(projectile, velocity, hits)
+            continue
+        }
         if (kind == ProjectileKind.WIND_CHARGE && projectile.age >= WIND_CHARGE_LIFETIME) {
             removeProjectile(projectile.id)
             continue
@@ -449,6 +464,29 @@ internal fun FlatWorld.tickProjectiles(targets: Map<Long, Box>, eyes: Map<Long, 
         else if ((hit != null && !kind.sticks) || fallenOut) removeProjectile(projectile.id)
     }
     return hits
+}
+
+/**
+ * Flies a firework [rocket] a tick, moving at [velocity], as Bedrock's do:
+ * through whoever's in its way, and against a block, stopping only as far
+ * as the block holds it back, to slide on along it the other ways. Once
+ * it's flown its fuse, it bursts where it is, added to [hits].
+ */
+private fun FlatWorld.flyRocket(rocket: Projectile, velocity: Vec3, hits: MutableList<ProjectileHit>) {
+    if (rocket.age >= rocket.fuse) {
+        hits += ProjectileHit.Air(rocket, rocket.position)
+        removeProjectile(rocket.id)
+        return
+    }
+    var box = Box.around(rocket.position)
+    val dy = clip(box, Axis.Y, velocity.y.toDouble())
+    box = box.shifted(Axis.Y, dy)
+    val dx = clip(box, Axis.X, velocity.x.toDouble())
+    box = box.shifted(Axis.X, dx)
+    val dz = clip(box, Axis.Z, velocity.z.toDouble())
+    box = box.shifted(Axis.Z, dz)
+    fun held(moved: Double, wanted: Float) = if (moved != wanted.toDouble()) 0f else wanted
+    rocket.flown(box.bottom(), Vec3(held(dx, velocity.x), held(dy, velocity.y), held(dz, velocity.z)))
 }
 
 /** Flies a returning [trident] a tick toward [eyes], whoever threw it: it rises toward them, and is drawn their way, the harder for each level of Loyalty. */

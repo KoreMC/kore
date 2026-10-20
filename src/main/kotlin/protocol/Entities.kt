@@ -180,8 +180,10 @@ internal fun ByteBuf.writeRidesNothing(version: GameVersion) {
  * pointing the way [pitch] and [yaw] say, with [flags] of its own, like an
  * arrow's sparks, and [properties] of its entity set, by their place among
  * its properties, like an egg's climate variant, for a tipped arrow, the
- * [potion] it's tipped with, and for a thrown potion, the potion it is,
- * [bottle]. It's a quarter of a block each way, as an item is.
+ * [potion] it's tipped with, for a thrown potion, the potion it is,
+ * [bottle], and for a firework rocket, its item's NBT, [firework], which
+ * it bursts into the stars of. It's a quarter of a block each way, as an
+ * item is.
  */
 data class AddProjectile(
     val entityId: Long,
@@ -195,6 +197,7 @@ data class AddProjectile(
     val properties: List<Pair<Int, Int>> = emptyList(),
     val potion: Int? = null,
     val bottle: Int? = null,
+    val firework: NbtMap? = null,
 ) : VersionedPacket {
     override val id get() = ADD_ACTOR
 
@@ -217,6 +220,7 @@ data class AddProjectile(
                 potion?.let { ShortItem(ActorDataId.AUX_VALUE_DATA, it.toShort()) },
                 potion?.takeIf { it > LAST_PLAIN_POTION }?.let { ByteItem(ActorDataId.CUSTOM_DISPLAY, (it + 1).toByte()) },
                 bottle?.let { ShortItem(ActorDataId.AUX_VALUE_DATA, it.toShort()) },
+                firework?.let { NbtItem(ActorDataId.DISPLAY_FIREWORK, it) },
             ),
         )
         out.writeVarUInt(properties.size)
@@ -350,6 +354,9 @@ data class ActorEvent(val entityId: Long, val event: Int, val data: Int) : Serve
 
         /** An entity that died coming back to life, as a player respawning does: it stands up again, whole. */
         const val SPAWN_ALIVE = 18
+
+        /** A firework rocket bursting into the stars its [ActorDataId.DISPLAY_FIREWORK] has. */
+        const val FIREWORKS_EXPLODE = 25
 
         /** An arrow quivering as it sticks in a block. The data is for how many ticks. */
         const val ARROW_SHAKE = 39

@@ -73,7 +73,7 @@ internal fun FlatWorld.exposure(at: Vec3, box: Box): Double {
 }
 
 /** Whether nothing solid stands between [from] and [to]. */
-private fun FlatWorld.clearBetween(from: Vec3, to: Vec3): Boolean {
+internal fun FlatWorld.clearBetween(from: Vec3, to: Vec3): Boolean {
     val steps = maxOf(1, (from.distanceTo(to) / SIGHT_STEP).toInt())
     for (step in 0..steps) {
         val share = step.toDouble() / steps

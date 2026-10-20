@@ -53,6 +53,7 @@ enum class DamageCause(
     ARROW(3, "death.attack.arrow", armour = true),
     TRIDENT(3, "death.attack.trident", armour = true),
     MAGIC(14, "death.attack.magic", armour = false),
+    FIREWORKS(23, "death.attack.fireworks", armour = true),
     WITHER(15, "death.attack.wither", armour = false),
     STARVATION(16, "death.attack.starve", armour = false, resisted = false),
 }
