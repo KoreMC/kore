@@ -93,6 +93,7 @@ private const val REMOVE_ACTOR = 14
 private const val PLAYER_LIST = 63
 private const val MOB_EQUIPMENT = 31
 private const val MOB_ARMOR_EQUIPMENT = 32
+private const val SET_ACTOR_MOTION = 40
 
 /** The input flag set on every tick a player sneaks. */
 private const val SNEAKING = 8
@@ -111,6 +112,7 @@ private const val BOW = 9
 private const val ARROW = 10
 private const val CROSSBOW = 11
 private const val TRIDENT = 12
+private const val WIND_CHARGE = 13
 
 /** The input flag set on the tick a player lands. */
 private const val VERTICAL_COLLISION = 50
@@ -136,12 +138,13 @@ class PlayersTest {
     private val arrow = ItemDefinition("minecraft:arrow", ARROW, componentBased = false, ItemVersion.NONE)
     private val crossbow = ItemDefinition("minecraft:crossbow", CROSSBOW, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 466)
     private val trident = ItemDefinition("minecraft:trident", TRIDENT, componentBased = false, ItemVersion.NONE, maxStackSize = 1, maxDurability = 251)
+    private val windCharge = ItemDefinition("minecraft:wind_charge", WIND_CHARGE, componentBased = false, ItemVersion.NONE)
 
     /** What every player had when they last left, or null for players new to the world. */
     private var saved: NbtMap? = null
     private val game = GameData(
         world, emptyList(), org.koremc.protocol.BlockDefinitions(emptyList()), creative, emptyMap(), Drops(emptyList(), creative, palette),
-        items = ItemStacks(listOf(helmet, chestplate, shield, sword, axe, mace, snowball, enderPearl, bow, arrow, crossbow, trident), creative, palette),
+        items = ItemStacks(listOf(helmet, chestplate, shield, sword, axe, mace, snowball, enderPearl, bow, arrow, crossbow, trident, windCharge), creative, palette),
         players = object : PlayerSaves {
             override fun load(player: UUID) = saved
 
@@ -491,6 +494,84 @@ class PlayersTest {
         val got = alex.received()
         assertTrue(got.any { it.contentEquals(ActorEvent(2, ActorEvent.HURT, DamageCause.PROJECTILE.id).encode()) })
         assertTrue(got.any { it.contentEquals(SetActorMotion(2, Vec3(0.45f, 0.3608f, 0f)).encode()) })
+    }
+
+    @Test
+    fun `a wind charge hurts whoever it hits by a point, and bursts, blowing them back, and its thrower waits half a second to throw another`() {
+        val steve = Client(1, "Steve", "1111")
+        val alex = Client(2, "Alex", "2222")
+        alex.moves(Vec3(3.5f, -61.38f, 0.5f))
+        tick()
+        steve.session.give(ItemStack(windCharge, 3))
+        steve.received()
+        alex.received()
+
+        // Steve, at the spawn, throws east, at Alex, then straight away again, which waits.
+        steve.moves(Vec3(0.5f, -61.38f, 0.5f), yaw = -90f)
+        steve.throws(WIND_CHARGE)
+        steve.throws(WIND_CHARGE)
+        assertEquals(2, steve.session.heldStack?.count)
+        assertTrue(steve.received().any { it.contentEquals(PlayerStartItemCooldown("wind_charge", 10).encode()) })
+        val thrown = world.projectiles.single()
+        repeat(3) { clients.map { it.session }.flyProjectiles(game) }
+
+        assertTrue(thrown !in world.projectiles)
+        assertEquals(19f, alex.session.vitals.health)
+        val got = alex.received()
+        assertTrue(got.any { it.contentEquals(LevelSoundEvent(LevelSoundEvent.WIND_CHARGE_BURST, thrown.position, -1).encode()) })
+        // Bursting level with his eyes, at his front, it blows him straight back, east, by a little over a quarter of its knockback.
+        val blown = motionsOf(got, 2)
+        assertEquals(2, blown.size, "knocked back by the hit, and blown back by the burst")
+        assertEquals(0.34f, blown.last().x, 0.01f)
+        assertEquals(0f, blown.last().y)
+        assertTrue(motionsOf(steve.received(), 1).isEmpty(), "Steve's out of its reach")
+    }
+
+    @Test
+    fun `a wind charge thrown at the ground underfoot launches the player, and the fall they'd made does them no harm`() {
+        val steve = Client(1, "Steve", "1111")
+        steve.session.give(ItemStack(windCharge))
+        // Ten blocks down, a block above the ground, throwing straight down.
+        steve.moves(Vec3(0.5f, -50.38f, 0.5f))
+        steve.moves(Vec3(0.5f, -60.38f, 0.5f), pitch = 90f)
+        steve.received()
+        steve.throws(WIND_CHARGE)
+        repeat(2) { clients.map { it.session }.flyProjectiles(game) }
+
+        val launched = motionsOf(steve.received(), 1).single()
+        assertTrue(launched.y > 0.6f && launched.x == 0f && launched.z == 0f, "straight up: $launched")
+        steve.moves(Vec3(0.5f, -61.38f, 0.5f), pitch = 90f, inputs = listOf(VERTICAL_COLLISION))
+        assertEquals(20f, steve.session.vitals.health)
+    }
+
+    @Test
+    fun `a wind charge hit turns back the way the hitter looks, as theirs, and hurts whoever threw it`() {
+        val steve = Client(1, "Steve", "1111")
+        val alex = Client(2, "Alex", "2222")
+        // Far enough east for it to be hit back, facing west.
+        alex.moves(Vec3(17.5f, -61.38f, 0.5f), yaw = 90f)
+        tick()
+        steve.session.give(ItemStack(windCharge))
+        steve.moves(Vec3(0.5f, -61.38f, 0.5f), yaw = -90f)
+        steve.throws(WIND_CHARGE)
+        val charge = world.projectiles.single()
+        repeat(10) { clients.map { it.session }.flyProjectiles(game) }
+
+        alex.attacks(charge.id)
+        assertEquals(2, charge.thrower)
+        assertEquals(-1f, charge.velocity.x)
+        assertEquals(0f, charge.velocity.z, 1e-6f)
+        repeat(16) { clients.map { it.session }.flyProjectiles(game) }
+        assertTrue(charge !in world.projectiles)
+        assertEquals(19f, steve.session.vitals.health)
+        assertEquals(20f, alex.session.vitals.health)
+    }
+
+    /** The motions [packets] set on the entity [entityId]. */
+    private fun motionsOf(packets: List<ByteArray>, entityId: Long) = packets.mapNotNull { packet ->
+        val buffer = Unpooled.wrappedBuffer(packet)
+        if (buffer.readVarUInt() != SET_ACTOR_MOTION || buffer.readVarULong() != entityId) return@mapNotNull null
+        Vec3(buffer.readFloatLE(), buffer.readFloatLE(), buffer.readFloatLE())
     }
 
     @Test

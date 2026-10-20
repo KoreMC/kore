@@ -6,6 +6,8 @@ import org.koremc.registry.BlockState
 private const val LEVER = "minecraft:lever"
 private const val OPEN = "open_bit"
 private const val PRESSED = "button_pressed_bit"
+private const val LIT = "lit"
+private const val PUT_OUT_CANDLE = "extinguish.candle"
 internal const val CARDINAL = "minecraft:cardinal_direction"
 
 /** How long a button stays pressed, in ticks: a second for stone ones, half as long again for wooden ones. */
@@ -107,6 +109,28 @@ fun FlatWorld.use(pos: BlockPos, facing: Face): Used? {
             Used(listOf(pos), if (opening) "fence_gate.open" else "fence_gate.close", blockAt(pos))
         }
         else -> swing(pos, state, opening = state.properties[OPEN] == 0.toByte())
+    }
+}
+
+/**
+ * Blows on the block at [pos] as a wind charge's burst reaching it does:
+ * a lever flips, a button presses in, a door, trapdoor or fence gate opens
+ * or shuts, but iron ones, a door's two halves together and a gate facing
+ * the way it did, and a lit candle, or one on a cake, goes out. Null for a
+ * block the wind leaves be.
+ */
+fun FlatWorld.blowOn(pos: BlockPos): Used? {
+    val state = stateAt(pos) ?: return null
+    val name = state.name
+    return when {
+        name == LEVER || name.endsWith("button") -> use(pos, Face.NORTH)
+        name in OPENED_BY_REDSTONE -> null
+        state.opensWithPower -> swingByPower(pos, state, opening = state.properties[OPEN] == 0.toByte())
+        (name.endsWith("candle") || name.endsWith("candle_cake")) && state.properties[LIT] == 1.toByte() -> {
+            change(pos, state, LIT to bit(false))
+            Used(listOf(pos), PUT_OUT_CANDLE)
+        }
+        else -> null
     }
 }
 

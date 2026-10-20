@@ -235,6 +235,11 @@ class ItemEntity(val id: Long, stack: ItemStack, position: Vec3, velocity: Vec3,
         pushed = true
     }
 
+    /** Pushes it [by], as a wind charge's burst does, on top of how it was moving. */
+    internal fun push(by: Vec3) {
+        velocity = Vec3(velocity.x + by.x, velocity.y + by.y, velocity.z + by.z)
+    }
+
     /** Puts it [at] a point, stopped, as a command does. */
     fun teleport(at: Vec3) {
         position = at

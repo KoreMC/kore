@@ -81,8 +81,8 @@ private val COMMENTS = mapOf(
         "Off, they're only items, and cake only a block.",
     "features.combat" to "Players hitting each other: damage by weapon, enchantments and effects, critical hits, knockback and Fire Aspect.\n" +
         "Off, a hit does nothing. The pvp game rule turns it off too, for a while.",
-    "features.projectiles" to "Throwing snowballs, eggs and ender pearls, which hit players and knock them back, and an ender pearl taking its thrower\n" +
-        "where it lands. Off, they're only items.",
+    "features.projectiles" to "Throwing and shooting: snowballs, eggs, ender pearls, wind charges, bows, crossbows and tridents, which fly and hit\n" +
+        "players, an ender pearl taking its thrower where it lands, and a wind charge bursting. Off, they're only items.",
     "commandLimits" to "The most blocks a command changes at once: a number, true for the game's own limit, or false for none.\n" +
         "Past the game's own, a big fill or clone can hold the server up a moment as it works, and players' games as they take it in.",
     "commandLimits.fill" to "The most blocks /fill fills. The game's own limit is 32768.",

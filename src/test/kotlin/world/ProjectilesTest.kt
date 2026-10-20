@@ -13,6 +13,7 @@ import org.koremc.registry.withEnchantments
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -105,6 +106,34 @@ class ProjectilesTest {
         )
         world.tickProjectiles(emptyMap(), mapOf(1L to Vec3(0.5f, -61.38f, 0.5f)))
         assertTrue(loyal in world.projectiles && loyal.returning)
+    }
+
+    @Test
+    fun `a wind charge flies straight on, neither slowing nor falling, until it bursts high enough above the world`() {
+        val charge = world.spawnProjectile(ProjectileKind.WIND_CHARGE, thrower = 1, Vec3(0.5f, -50f, 0.5f), Vec3(1.5f, 0f, 0f))
+        repeat(10) { world.tickProjectiles(emptyMap()) }
+        assertEquals(Vec3(15.5f, -50f, 0.5f), charge.position)
+        assertEquals(Vec3(1.5f, 0f, 0f), charge.velocity)
+
+        val up = world.spawnProjectile(ProjectileKind.WIND_CHARGE, thrower = 1, Vec3(0.5f, MAX_Y + 29f, 0.5f), Vec3(0f, 1.5f, 0f))
+        val hits = world.tickProjectiles(emptyMap())
+        assertEquals(listOf<ProjectileHit>(ProjectileHit.Air(up, Vec3(0.5f, MAX_Y + 30.5f, 0.5f))), hits)
+        assertTrue(up !in world.projectiles)
+    }
+
+    @Test
+    fun `a wind charge turned back flies the new way, as whoever turned it back's, but not again for half a second`() {
+        val charge = world.spawnProjectile(ProjectileKind.WIND_CHARGE, thrower = 1, Vec3(0.5f, -50f, 0.5f), Vec3(1.5f, 0f, 0f))
+        assertFalse(charge.deflectable, "just thrown")
+        repeat(10) { world.tickProjectiles(emptyMap()) }
+        assertTrue(charge.deflectable)
+
+        charge.deflect(2, Vec3(-1f, 0f, 0f))
+        assertEquals(2, charge.thrower)
+        assertFalse(charge.deflectable)
+        world.tickProjectiles(emptyMap())
+        assertEquals(Vec3(14.5f, -50f, 0.5f), charge.position)
+        assertFalse(world.spawnProjectile(ProjectileKind.SNOWBALL, thrower = 1, Vec3(0.5f, -50f, 0.5f), Vec3(1.5f, 0f, 0f)).also { repeat(10) { world.tickProjectiles(emptyMap()) } }.deflectable)
     }
 
     @Test

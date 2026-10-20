@@ -69,6 +69,23 @@ private const val LOYALTY_KEPT = 0.95
 private const val ENDER_PEARL_COOLDOWN = 20
 const val ENDER_PEARL_DAMAGE = 5f
 
+/** How long a wind charge's thrower waits to throw another, in ticks: half a second, how big it is, and how hard it hits whoever it hits. */
+private const val WIND_CHARGE_COOLDOWN = 10
+private const val WIND_CHARGE_SIZE = 0.3125f
+private const val WIND_CHARGE_DAMAGE = 1f
+
+/**
+ * How far above the top of the world a wind charge, which nothing pulls
+ * down, flies before it bursts, as the game has it, and how long one flies
+ * at most, in ticks, a minute, where the game would leave it behind in a
+ * part of the world nobody's near.
+ */
+private const val WIND_CHARGE_CEILING = 30
+private const val WIND_CHARGE_LIFETIME = 60 * 20
+
+/** How long a projectile that can be turned back can't be again, once thrown or turned back, in ticks: half a second. */
+private const val DEFLECT_IMMUNITY = 10
+
 /** The game's egg, and its climate variant, which its look goes by, as the game's own egg entity has them. */
 const val EGG_ENTITY = "minecraft:egg"
 const val CLIMATE_VARIANT = "minecraft:climate_variant"
@@ -82,7 +99,8 @@ val CLIMATE_VARIANTS = listOf("temperate", "warm", "cold")
  * leaves them, the wait before its thrower can throw another, if there is
  * one, an egg's climate variant, by its place in [CLIMATE_VARIANTS],
  * whether it sticks in a block it hits, as an arrow does, rather than
- * breaking, and how wide and tall it is.
+ * breaking, how wide and tall it is, how hard it hits whoever it hits, if
+ * it hurts, and whether a hit turns it back, as one turns a wind charge.
  */
 enum class ProjectileKind(
     val item: String?,
@@ -96,6 +114,8 @@ enum class ProjectileKind(
     val sticks: Boolean = false,
     val width: Float = PROJECTILE_SIZE,
     val height: Float = PROJECTILE_SIZE,
+    val impact: Float = 0f,
+    val deflects: Boolean = false,
 ) {
     SNOWBALL("minecraft:snowball", "minecraft:snowball", "Snowball", drop = EYE_DROP),
     EGG("minecraft:egg", EGG_ENTITY, "Egg", climate = 0),
@@ -106,6 +126,10 @@ enum class ProjectileKind(
     ),
     ARROW(null, "minecraft:arrow", "Arrow", ARROW_GRAVITY, drop = EYE_DROP, sticks = true),
     TRIDENT(null, "minecraft:thrown_trident", "Trident", TRIDENT_GRAVITY, drop = EYE_DROP, sticks = true, height = TRIDENT_HEIGHT),
+    WIND_CHARGE(
+        "minecraft:wind_charge", "minecraft:wind_charge_projectile", "Wind Charge", gravity = 0.0, drag = 0.0, cooldown = ItemCooldown("wind_charge", WIND_CHARGE_COOLDOWN),
+        width = WIND_CHARGE_SIZE, height = WIND_CHARGE_SIZE, impact = WIND_CHARGE_DAMAGE, deflects = true,
+    ),
     ;
 
     /** Whether it's an egg, of any colour. */
@@ -147,7 +171,7 @@ data class ArrowShot(
 class Projectile(
     val id: Long,
     val kind: ProjectileKind,
-    val thrower: Long,
+    thrower: Long,
     position: Vec3,
     velocity: Vec3,
     val arrow: ArrowShot? = null,
@@ -156,15 +180,25 @@ class Projectile(
 ) {
     /** A trident's Loyalty, which brings it back to whoever threw it. */
     val loyalty = item?.levelOf(LOYALTY) ?: 0
+
+    /** Whoever threw it, or last turned it back. */
+    var thrower = thrower
+        private set
+
     var position = position
         private set
 
     var velocity = velocity
         private set
 
-    /** Ticks since it was thrown. */
+    /** Ticks since it was thrown, and how old it was when it was thrown, or last turned back. */
     var age = 0
         private set
+    var thrownAt = 0
+        private set
+
+    /** Whether a hit would turn it back now, as it does a wind charge, but in the first half second after it's thrown, or turned back. */
+    val deflectable get() = kind.deflects && age - thrownAt >= DEFLECT_IMMUNITY
 
     /** Which way it points, as the way it last flew: its yaw and pitch, in degrees. */
     var yaw = yawOf(velocity)
@@ -251,6 +285,13 @@ class Projectile(
         velocity = Vec3(velocity.x * BOUNCE, velocity.y * BOUNCE, velocity.z * BOUNCE)
     }
 
+    /** Turns it back, as the entity [by] hits it, flying [velocity] now, as theirs. */
+    fun deflect(by: Long, velocity: Vec3) {
+        thrower = by
+        this.velocity = velocity
+        thrownAt = age
+    }
+
     /** Has a trident fall away from someone it hurt, hurting nobody else until it lands. */
     fun fallAway() {
         velocity = Vec3(velocity.x * FALL_AWAY_ACROSS, velocity.y * FALL_AWAY_UP, velocity.z * FALL_AWAY_ACROSS)
@@ -297,6 +338,9 @@ sealed interface ProjectileHit {
 
     /** It hit the entity [entityId]. */
     data class Entity(override val projectile: Projectile, override val at: Vec3, val entityId: Long) : ProjectileHit
+
+    /** It burst in the open air, as a wind charge flown too high does. */
+    data class Air(override val projectile: Projectile, override val at: Vec3) : ProjectileHit
 }
 
 /** The way someone looking as [yaw] and [pitch] say looks, a block long. */
@@ -316,7 +360,9 @@ fun lookVector(yaw: Float, pitch: Float): Vec3 {
  * an arrow for a minute, and one that hits someone stays, to go once it's
  * hurt them, or bounce off. A trident with Loyalty heads back to whoever
  * threw it, by their [eyes], once it's landed, or fallen out of the world,
- * flying through whatever's in the way. Returns what each that hit, hit.
+ * flying through whatever's in the way. A wind charge bursts in the air
+ * high enough above the world, and goes after a minute. Returns what each
+ * that hit, hit.
  */
 internal fun FlatWorld.tickProjectiles(targets: Map<Long, Box>, eyes: Map<Long, Vec3> = emptyMap()): List<ProjectileHit> {
     val hits = mutableListOf<ProjectileHit>()
@@ -345,9 +391,19 @@ internal fun FlatWorld.tickProjectiles(targets: Map<Long, Box>, eyes: Map<Long, 
         val velocity = Vec3((v.x * (1 - kind.drag)).toFloat(), (v.y * (1 - kind.drag) - kind.gravity).toFloat(), (v.z * (1 - kind.drag)).toFloat())
         val from = projectile.position
         val to = Vec3(from.x + velocity.x, from.y + velocity.y, from.z + velocity.z)
+        if (kind == ProjectileKind.WIND_CHARGE && projectile.age >= WIND_CHARGE_LIFETIME) {
+            removeProjectile(projectile.id)
+            continue
+        }
+        if (kind == ProjectileKind.WIND_CHARGE && to.y > MAX_Y + WIND_CHARGE_CEILING) {
+            projectile.flown(to, velocity)
+            hits += ProjectileHit.Air(projectile, to)
+            removeProjectile(projectile.id)
+            continue
+        }
         val blocked = firstBlockBetween(from, to)
         val struck = targets.asSequence()
-            .filter { (id, _) -> (id != projectile.thrower || projectile.age >= THROWER_MISSED_FOR) && id !in projectile.pierced && !projectile.spent }
+            .filter { (id, _) -> (id != projectile.thrower || projectile.age - projectile.thrownAt >= THROWER_MISSED_FOR) && id !in projectile.pierced && !projectile.spent }
             .mapNotNull { (id, box) -> box.grown(HIT_REACH).enteredAlong(from, to)?.let { id to it } }
             .minByOrNull { it.second }
         val hit = when {

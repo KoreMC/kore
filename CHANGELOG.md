@@ -18,6 +18,8 @@ Each release, newest first, with the client version it's for. What's done since 
 - Tridents are thrown, hurting whoever they hit, the more with Impaling in water or rain, and stay where they land. Loyalty
   brings one back, Channeling calls lightning in a thunderstorm, and Riptide spins its thrower off in water or rain, into
   whoever they hit
+- Wind charges are thrown, and burst where they hit, blowing away the players and items near, sparing a launched player's fall,
+  and flipping the doors, trapdoors, fence gates, buttons and levers they reach, and putting out candles. A hit turns one back
 - The mace smashes, struck from a fall of a block and a half or more: harder for every block, with Density, and the fall then
   does its wielder no harm. Breach gets past armour, and Wind Burst launches the wielder back up
 - The console no longer shows players dying or respawning, only what they say and the commands they run

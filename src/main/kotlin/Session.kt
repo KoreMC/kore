@@ -337,6 +337,7 @@ import org.koremc.world.beaconLevel
 import org.koremc.world.bit
 import org.koremc.world.biteCake
 import org.koremc.world.blockPlacedBy
+import org.koremc.world.blowOn
 import org.koremc.world.bowForce
 import org.koremc.world.breakBlock
 import org.koremc.world.breakTicks
@@ -413,6 +414,7 @@ import org.koremc.world.putOnLectern
 import org.koremc.world.putOutCandle
 import org.koremc.world.putOutFire
 import org.koremc.world.rainingAt
+import org.koremc.world.reachedByWindBurst
 import org.koremc.world.restoreBlockData
 import org.koremc.world.savedBlockEntitiesIn
 import org.koremc.world.setBeaconPowers
@@ -457,6 +459,7 @@ import org.koremc.world.wearFromBreaking
 import org.koremc.world.wearFromHitting
 import org.koremc.world.wholeExperience
 import org.koremc.world.windBurstLift
+import org.koremc.world.windBurstPush
 import org.koremc.world.withBlockData
 import org.koremc.world.withStrength
 import org.koremc.world.writeSign
@@ -3414,16 +3417,35 @@ class Session(
     /**
      * The player hit by [projectile], thrown by [thrower]: unless their
      * shield's up and covers it, or it's another player's and the pvp rule
-     * says no, it hurts them, though a snowball, egg or ender pearl by
-     * nothing, and knocks them back the way it flew, if it's the first hurt
-     * in a while.
+     * says no, it hurts them, by as much as its kind does, a snowball, egg
+     * or ender pearl by nothing, and knocks them back the way it flew, if
+     * it's the first hurt in a while. A wind charge knocks them back even
+     * through their shield.
      */
     internal fun hitBy(projectile: Projectile, thrower: Session?) {
         if (thrower != null && thrower !== this && !world.rules.pvp) return
-        if (blocks(projectile.position, weapon = null, damage = 0f)) return
-        val fresh = !vitals.inGrace
         val flew = projectile.velocity
-        if (hurt(0f, DamageCause.PROJECTILE, by = thrower) && fresh) knockBack(Vec3(feet.x - flew.x, feet.y, feet.z - flew.z), extra = 0f)
+        val from = Vec3(feet.x - flew.x, feet.y, feet.z - flew.z)
+        if (blocks(projectile.position, weapon = null, damage = 0f)) {
+            if (projectile.kind == ProjectileKind.WIND_CHARGE) knockBack(from, extra = 0f)
+            return
+        }
+        val fresh = !vitals.inGrace
+        if (hurt(projectile.kind.impact, DamageCause.PROJECTILE, by = thrower) && fresh) knockBack(from, extra = 0f)
+    }
+
+    /**
+     * The player caught in a wind charge's burst at [at]: pushed away from
+     * it, on top of how they were moving, the harder the nearer, unless
+     * they're flying in creative, and the fall they've made so far does them
+     * no harm.
+     */
+    internal fun blownFrom(at: Vec3) {
+        if (flying && gameMode == GameMode.CREATIVE) return
+        val push = world.windBurstPush(at, feet, eyes(), hitbox) ?: return
+        fallDistance = 0f
+        send(SetActorMotion(entityId, Vec3(delta.x + push.x, delta.y + push.y, delta.z + push.z)))
+        log.debug("{} was blown {} by a wind charge", name, push)
     }
 
     /**
@@ -4033,12 +4055,26 @@ class Session(
      * and the Thorns on what the other wears may prick them.
      */
     private fun attack(use: ItemUseOnEntity) {
-        if (!world.features.combat || !world.rules.pvp || dead || gameMode == GameMode.SPECTATOR) return
+        if (dead || gameMode == GameMode.SPECTATOR) return
         if (use.hotbarSlot in 0 until HOTBAR_SIZE) heldSlot = use.hotbarSlot
-        val target = viewers().find { it.entityId == use.target && it !== this && it.isInGame && !it.dead } ?: return
         val reach = if (gameMode == GameMode.CREATIVE) CREATIVE_ATTACK_REACH else ATTACK_REACH
+        world.projectiles.find { it.id == use.target }?.let { return deflect(it, reach) }
+        if (!world.features.combat || !world.rules.pvp) return
+        val target = viewers().find { it.entityId == use.target && it !== this && it.isInGame && !it.dead } ?: return
         if (use.target !in shownPlayers || eyes().distanceTo(target.feet) > reach) return
         strike(target)
+    }
+
+    /**
+     * The player hitting [projectile], within [reach]: a wind charge turns
+     * back the way they look, a block a tick, as theirs, unless it was
+     * thrown or turned back in the last half second, or projectiles are
+     * switched off.
+     */
+    private fun deflect(projectile: Projectile, reach: Float) {
+        if (!world.features.projectiles || !projectile.deflectable || eyes().distanceTo(projectile.position) > reach) return
+        projectile.deflect(entityId, lookVector(yaw, pitch))
+        log.debug("{} turned back a {}", name, projectile.kind.title)
     }
 
     /** The player's hit on [target], as [attack] has it, from a spin or not, [spun]. */
@@ -4929,22 +4965,10 @@ internal fun Collection<Session>.showAround(packets: List<Pair<BlockPos, ServerP
 }
 
 /**
- * Ticks the blocks in [game]'s world, for these players to see if they
- * have the chunks: blocks that lost what held them up a tick ago break,
- * scaffolding moves along, sand and the like fall, coral out of water
- * dies, big dripleaves tip under the players and items standing on them,
- * pressure plates press under the players, items and orbs on them,
- * pressed buttons pop back out, and pistons move, and push or carry the
- * players in the way of what they move, or on top of it. Spectators press
- * nothing. What breaks drops what it drops, if [dropItems], and what it
- * held either way, and falling blocks that can't land drop as items. Run
- * once a tick.
- */
-/**
  * Flies what's been thrown a tick, at the players in the game, and lands
  * what hits something: it bursts where it hit for everyone around to see,
- * a player it hit is hit by it, and an ender pearl takes whoever threw it
- * there.
+ * a player it hit is hit by it, an ender pearl takes whoever threw it
+ * there, and a wind charge blows away what's near.
  */
 internal fun Collection<Session>.flyProjectiles(game: GameData) {
     val players = filter { it.isInGame && !it.dead && it.gameMode != GameMode.SPECTATOR }
@@ -4976,9 +5000,40 @@ internal fun Collection<Session>.flyProjectiles(game: GameData) {
             continue
         }
         target?.hitBy(projectile, thrower)
+        if (projectile.kind == ProjectileKind.WIND_CHARGE) {
+            windBurst(hit.at, game)
+            continue
+        }
         showAround(burst(projectile.kind, hit.at, game).map { hit.at.toBlockPos() to it })
         if (projectile.kind == ProjectileKind.ENDER_PEARL) thrower?.arriveByPearl(hit.at)
     }
+}
+
+/**
+ * A wind charge bursting at [at], for everyone around to see and hear: the
+ * players and items near it are blown away from it, and the doors,
+ * trapdoors, fence gates, buttons and levers it reaches are toggled, and
+ * candles put out, as everyone with their chunk sees and hears.
+ */
+private fun Collection<Session>.windBurst(at: Vec3, game: GameData) {
+    val world = game.world
+    val here = at.toBlockPos()
+    showAround(listOf(here to LevelEvent(LevelEvent.PARTICLES_WIND_EXPLOSION, at, 0), here to LevelSoundEvent(LevelSoundEvent.WIND_CHARGE_BURST, at, -1)))
+    filter { it.isInGame && !it.dead && it.gameMode != GameMode.SPECTATOR }.forEach { it.blownFrom(at) }
+    for (item in world.items) {
+        val eyes = Vec3(item.position.x, item.position.y + ITEM_EYE_HEIGHT, item.position.z)
+        world.windBurstPush(at, item.position, eyes, Box.around(item.position))?.let(item::push)
+    }
+    val toggled = HashSet<BlockPos>()
+    val packets = mutableListOf<Pair<BlockPos, ServerPacket>>()
+    for (pos in world.reachedByWindBurst(at)) {
+        if (pos in toggled) continue
+        val used = world.blowOn(pos) ?: continue
+        toggled += used.changed
+        packets += used.changed.map { it to UpdateBlock(it, world.blockAt(it)) }
+        used.sound?.let { packets += pos to LevelSoundEvent(it, pos.centre, used.soundData) }
+    }
+    showAround(packets)
 }
 
 /**
@@ -5019,6 +5074,9 @@ private const val ARROW_PICKUP_UP = 0.5
  */
 private const val SPIN_REACH = 1.0
 
+/** How high an item's eyes are, which a burst pushes it toward, as the game has them. */
+private const val ITEM_EYE_HEIGHT = 0.2125f
+
 /** How many bits a snowball or an egg bursts into where it hits. */
 private const val BURST_PARTICLES = 6
 
@@ -5032,6 +5090,18 @@ private fun burst(kind: ProjectileKind, at: Vec3, game: GameData): List<ServerPa
     else -> listOf(LevelEvent(LevelEvent.PARTICLES_TELEPORT, at, 0), LevelSoundEvent(LevelSoundEvent.TELEPORT, at, -1))
 }
 
+/**
+ * Ticks the blocks in [game]'s world, for these players to see if they
+ * have the chunks: blocks that lost what held them up a tick ago break,
+ * scaffolding moves along, sand and the like fall, coral out of water
+ * dies, big dripleaves tip under the players and items standing on them,
+ * pressure plates press under the players, items and orbs on them,
+ * pressed buttons pop back out, and pistons move, and push or carry the
+ * players in the way of what they move, or on top of it. Spectators press
+ * nothing. What breaks drops what it drops, if [dropItems], and what it
+ * held either way, and falling blocks that can't land drop as items. Run
+ * once a tick.
+ */
 internal fun Collection<Session>.tickBlocks(game: GameData, dropItems: Boolean) {
     val world = game.world
     val stood = world.stepOn(mapNotNull { it.standingAt } + world.items.filter { it.onGround }.map { it.position })

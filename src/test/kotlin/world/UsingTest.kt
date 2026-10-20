@@ -28,7 +28,8 @@ class UsingTest {
                 }
             } +
             (0..3).flatMap { direction -> (0..1).flatMap { open -> (0..1).map { upsideDown -> trapdoor(direction, open, upsideDown) } } } +
-            listOf("south", "west", "north", "east").flatMap { direction -> (0..1).map { gate(direction, it) } },
+            listOf("south", "west", "north", "east").flatMap { direction -> (0..1).map { gate(direction, it) } } +
+            (0..1).map { candle(it) },
     )
 
     // One layer of stone at the bottom of the world, with things to use standing on it.
@@ -127,6 +128,41 @@ class UsingTest {
     }
 
     @Test
+    fun `a wind charge's burst flips levers, presses buttons, swings doors, trapdoors and gates but iron ones, and puts out candles`() {
+        world[spot] = lever("up_east_west", 0)
+        assertEquals(Used(listOf(spot), "power.on", lever("up_east_west", 1).networkId), world.blowOn(spot))
+
+        world[spot] = button("minecraft:stone_button", Face.UP.ordinal, 0)
+        assertEquals(button("minecraft:stone_button", Face.UP.ordinal, 1), world.blowOn(spot)?.let { world.stateAt(spot) })
+
+        world[spot] = air
+        world.place(palette.defaultOf("minecraft:wooden_door")!!, spot.side(Face.DOWN), Face.UP, clickY = 0f, Placer(Face.NORTH))
+        val top = spot.side(Face.UP)
+        assertEquals(Used(listOf(spot, top), "door.open", door("minecraft:wooden_door", "east", 0, 1, 0).networkId), world.blowOn(spot))
+        assertEquals(door("minecraft:wooden_door", "east", 0, 1, 1), world.stateAt(top))
+
+        world[top] = air
+        world[spot] = door("minecraft:iron_door", "east", 0, 0, 0)
+        assertNull(world.blowOn(spot))
+
+        // A gate keeps facing the way it did.
+        world[spot] = gate("north", 0)
+        assertEquals("fence_gate.open", world.blowOn(spot)?.sound)
+        assertEquals(gate("north", 1), world.stateAt(spot))
+
+        world[spot] = trapdoor(0, 0, 0)
+        assertEquals("trapdoor.open", world.blowOn(spot)?.sound)
+
+        world[spot] = candle(1)
+        assertEquals(Used(listOf(spot), "extinguish.candle"), world.blowOn(spot))
+        assertEquals(candle(0), world.stateAt(spot))
+        assertNull(world.blowOn(spot), "it's out")
+
+        world[spot] = stone
+        assertNull(world.blowOn(spot))
+    }
+
+    @Test
     fun `other blocks aren't used`() {
         assertNull(world.use(spot.side(Face.DOWN), Face.NORTH))
         assertFalse(stone.usable)
@@ -150,6 +186,8 @@ class UsingTest {
 
     private fun gate(direction: String, open: Int) =
         state("minecraft:fence_gate", "minecraft:cardinal_direction" to direction, "in_wall_bit" to 0.toByte(), "open_bit" to open.toByte())
+
+    private fun candle(lit: Int) = state("minecraft:candle", "candles" to 0, "lit" to lit.toByte())
 
     private fun state(name: String, vararg properties: Pair<String, Any>) = BlockState(name, NbtMap.fromMap(mapOf(*properties)), 18168865)
 }
