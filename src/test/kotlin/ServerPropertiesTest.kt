@@ -2,6 +2,7 @@ package org.koremc
 
 import org.koremc.protocol.Difficulty
 import org.koremc.protocol.GameMode
+import org.koremc.protocol.GameVersion
 import org.koremc.storage.LevelType
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.readText
@@ -19,6 +20,15 @@ class ServerPropertiesTest {
     @AfterTest
     fun cleanUp() {
         directory.toFile().deleteRecursively()
+    }
+
+    @Test
+    fun `a new server advertises the newest protocol Kore speaks`() {
+        val config = ServerConfig()
+        assertEquals(GameVersion.NEWEST.protocol, config.protocol)
+        assertEquals(GameVersion.NEWEST.title, config.version)
+        assertEquals(config.protocol, config.toJoinInfo(0).protocol)
+        assertEquals(config.version, config.toJoinInfo(0).version)
     }
 
     @Test

@@ -183,7 +183,7 @@ class SessionTest {
     private val authenticator = LoginAuthenticator(MultiplayerTokenVerifier(keys = { authority.keys }), onlineMode = true)
 
     /** Survival, unless a test switches to creative before the session starts. */
-    private var config = ServerConfig(protocol = PROTOCOL, viewDistance = 8, gameMode = GameMode.SURVIVAL)
+    private var config = ServerConfig(protocol = PROTOCOL, version = "1.26.50", viewDistance = 8, gameMode = GameMode.SURVIVAL)
     private val itemRegistry = ItemRegistry(listOf(ItemDefinition("minecraft:stick", 323, componentBased = false, ItemVersion.NONE)))
     private val biomes = BiomeDefinitionList(listOf(BiomeDefinition("minecraft:plains", null, 0.8f, 0.4f, 0f, 0.125f, 0.05f, 0, rain = true, listOf("plains"))))
 

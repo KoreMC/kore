@@ -60,7 +60,7 @@ cd kore
 ./gradlew run
 ```
 
-The game data Kore needs comes with it, as the `data` submodule, for the same client release (1.26.50, protocol `2193`). `./gradlew jar` builds a single jar with the data inside, to run anywhere with `java -jar`.
+The game data Kore needs comes with it, as the `data` submodule, from 1.26.50. Kore advertises protocol `2225` (1.26.60) by default, and clients on 1.26.50 (protocol `2193`) can join too. `./gradlew jar` builds a single jar with the data inside, to run anywhere with `java -jar`.
 
 Kore uses port `19132` for signaling (TCP) and gameplay (UDP), so open both in your firewall.
 

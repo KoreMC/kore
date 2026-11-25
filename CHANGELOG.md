@@ -4,6 +4,7 @@ Each release, newest first, with the client version it's for. What's done since 
 
 ## Unreleased
 
+- Kore advertises protocol **2225** (Minecraft Bedrock **1.26.60**) by default, and saves new worlds as it. Clients on 1.26.50 (protocol 2193) still join
 - Players fight each other: hits hurt by the weapon, with Sharpness, Strength and Weakness, critical hits, knockback and Fire Aspect.
   The pvp game rule and a `combat` switch in `kore.jsonc` turn it off
 - A Totem of Undying in either hand saves a player from dying, but in the void
