@@ -32,7 +32,7 @@ data class ServerConfig(
     val operatorDomain: String = "localhost",
     /** What players still on the server are told as it stops, which the game has no words of its own for. */
     val shutdownMessage: String = "Server closed",
-    /** Where the game's item and block data lives: a checkout of https://github.com/KoreMC/data matching [version]. */
+    /** Where the game's item and block data lives: a checkout of https://github.com/KoreMC/data, which may be from an older release than [version]. */
     val dataDirectory: Path = Path.of("data"),
     val name: String = "Kore Server",
     /** The world's name, and the folder it's saved in, under [worldsDirectory]. */

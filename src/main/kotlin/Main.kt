@@ -69,7 +69,7 @@ fun main() {
     val vanilla = try {
         VanillaData.load(gameDataIn(config.dataDirectory))
     } catch (e: NoSuchFileException) {
-        log.error("Missing {}. Kore needs the game data for {} in {}: clone https://github.com/KoreMC/data there.", e.file, config.version, config.dataDirectory.toAbsolutePath())
+        log.error("Missing {}. Kore needs its game data in {}: clone https://github.com/KoreMC/data there.", e.file, config.dataDirectory.toAbsolutePath())
         exitProcess(1)
     }
     log.debug(

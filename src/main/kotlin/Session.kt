@@ -1334,12 +1334,12 @@ class Session(
 
     private fun onResourcePackResponse(packet: ResourcePackClientResponse) {
         when (packet.response) {
-            ResourcePackClientResponse.Response.DOWNLOADING_FINISHED -> send(ResourcePackStack(baseGameVersion = config.version))
+            ResourcePackClientResponse.Response.DOWNLOADING_FINISHED -> send(ResourcePackStack(baseGameVersion = gameVersion.title))
 
             // Kore offered nothing, so there's nothing to download. Carry on as though the client had everything.
             ResourcePackClientResponse.Response.DOWNLOADING -> {
                 log.debug("Network {} asked for packs Kore never offered: {}", networkId, packet.packs)
-                send(ResourcePackStack(baseGameVersion = config.version))
+                send(ResourcePackStack(baseGameVersion = gameVersion.title))
             }
 
             ResourcePackClientResponse.Response.RESOURCE_PACK_STACK_FINISHED -> startGame()
@@ -1368,7 +1368,7 @@ class Session(
                 worldSpawn = spawn,
                 worldName = config.level,
                 serverVersion = config.version,
-                baseGameVersion = config.version,
+                baseGameVersion = gameVersion.title,
                 blockDefinitions = game.blockDefinitions,
                 time = world.gameTime,
                 rainLevel = if (world.weather.raining) 1f else 0f,
